@@ -1,0 +1,11 @@
+.issued-equipment-table {
+    background: transparent;
+}
+
+.issued-equipment-table ::deep .mud-table-row:hover {
+    background: #f7fbff;
+}
+
+.issued-equipment-table ::deep .mud-table-cell {
+    border-bottom-color: #eef2f6;
+}

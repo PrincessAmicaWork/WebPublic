@@ -1,0 +1,38 @@
+@* Shared/StatusChip.razor – displays a coloured MudChip for a RequestStatus *@
+
+@switch (Status)
+{
+    case RequestStatus.Pending:
+        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.HourglassEmpty">
+            Ausstehend
+        </MudChip>
+        break;
+
+    case RequestStatus.Approved:
+        <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.ThumbUp">
+            Genehmigt
+        </MudChip>
+        break;
+
+    case RequestStatus.Denied:
+        <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.ThumbDown">
+            Abgelehnt
+        </MudChip>
+        break;
+
+    case RequestStatus.Preparing:
+        <MudChip T="string" Color="Color.Info" Size="Size.Small" Icon="@Icons.Material.Filled.Build">
+            In Vorbereitung
+        </MudChip>
+        break;
+
+    case RequestStatus.Collected:
+        <MudChip T="string" Color="Color.Default" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
+            Abgeholt
+        </MudChip>
+        break;
+}
+
+@code {
+    [Parameter] public RequestStatus Status { get; set; }
+}

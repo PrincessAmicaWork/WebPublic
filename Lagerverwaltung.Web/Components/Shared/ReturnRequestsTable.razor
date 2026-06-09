@@ -1,0 +1,142 @@
+@using Lagerverwaltung.Web.Models
+@using Lagerverwaltung.Web.Services
+
+<MudTable Items="@Requests"
+          Hover="true"
+          Dense="true"
+          Breakpoint="Breakpoint.Md"
+          Elevation="0">
+    <HeaderContent>
+        <MudTh>Ticket</MudTh>
+        <MudTh>Quelle</MudTh>
+        <MudTh>Benutzer</MudTh>
+        <MudTh>Artikel</MudTh>
+        <MudTh>Lagerposition</MudTh>
+        <MudTh>Datum</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Kommentar</MudTh>
+        @if (ShowActions)
+        {
+            <MudTh>Aktionen</MudTh>
+        }
+    </HeaderContent>
+
+    <RowTemplate Context="row">
+        <MudTd DataLabel="Ticket">
+            <MudText Typo="Typo.body2" Style="font-family:monospace;font-weight:700;">
+                @row.TicketNumber
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Quelle">
+            <MudChip T="string" Size="Size.Small" Color="@(row.EquipmentOrderLineId.HasValue ? Color.Info : Color.Default)">
+                @row.SourceLabel
+            </MudChip>
+        </MudTd>
+
+        <MudTd DataLabel="Benutzer">
+            <MudText Typo="Typo.body2">@row.RequesterName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@row.RequesterEmail</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Artikel">
+            <MudText Typo="Typo.body2" Style="font-weight:600;">@row.Description</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@row.CategoryName</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Lagerposition">
+            <MudText Typo="Typo.body2">#@row.PositionId</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@row.OrderNumber</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Datum">
+            <MudText Typo="Typo.caption">@row.RequestedAt.ToString("dd.MM.yyyy HH:mm")</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Color="@StatusColor(row.Status)" Size="Size.Small">
+                @StatusLabel(row.Status)
+            </MudChip>
+        </MudTd>
+
+        <MudTd DataLabel="Kommentar">
+            <MudText Typo="Typo.caption">
+                @(string.IsNullOrWhiteSpace(row.UserComment) || row.UserComment == " " ? "–" : row.UserComment)
+            </MudText>
+        </MudTd>
+
+        @if (ShowActions)
+        {
+            <MudTd DataLabel="Aktionen">
+                @if (row.Status == ReturnRequestStatus.Pending)
+                {
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.Check"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandleConfirm(row))">
+                            Rückgabe bestätigen
+                        </MudButton>
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Close"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandleCancel(row))">
+                            Abbrechen
+                        </MudButton>
+                    </MudStack>
+                }
+            </MudTd>
+        }
+    </RowTemplate>
+
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Keine Rückgaben vorhanden.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter] public List<ReturnRequestRow> Requests { get; set; } = new();
+    [Parameter] public bool ShowActions { get; set; }
+    [Parameter] public bool ActionBusy { get; set; }
+    [Parameter] public EventCallback<ReturnRequestRow> OnConfirm { get; set; }
+    [Parameter] public EventCallback<ReturnRequestRow> OnCancel { get; set; }
+
+    private async Task HandleConfirm(ReturnRequestRow row)
+    {
+        if (OnConfirm.HasDelegate)
+            await OnConfirm.InvokeAsync(row);
+    }
+
+    private async Task HandleCancel(ReturnRequestRow row)
+    {
+        if (OnCancel.HasDelegate)
+            await OnCancel.InvokeAsync(row);
+    }
+
+    private static string StatusLabel(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.Pending => "Rückgabe angemeldet",
+            ReturnRequestStatus.ConfirmedReturned => "Zurückgegeben",
+            ReturnRequestStatus.Cancelled => "Abgebrochen",
+            _ => status.ToString()
+        };
+    }
+
+    private static Color StatusColor(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.ConfirmedReturned => Color.Success,
+            ReturnRequestStatus.Cancelled => Color.Error,
+            _ => Color.Warning
+        };
+    }
+}

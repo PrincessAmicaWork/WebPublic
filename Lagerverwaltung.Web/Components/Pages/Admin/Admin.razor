@@ -1,0 +1,1395 @@
+@page "/admin"
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using Lagerverwaltung.Web.Data
+@using Lagerverwaltung.Web.Services
+@inject IEquipmentService EquipmentSvc
+@inject IEquipmentOrderService OrderSvc
+@inject IReturnService ReturnSvc
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ICurrentUserService CurrentUser
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+@inject IDialogService DialogSvc
+@inject ICurrentSiteService CurrentSiteService
+
+<PageTitle>Admin – Anfragen verwalten</PageTitle>
+
+<style>
+    
+.admin-page {
+    width: 100%;
+}
+
+.admin-title {
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.admin-subtitle {
+    color: #5f6b7a;
+    margin-bottom: 1.5rem;
+}
+
+.admin-summary-grid {
+    margin-bottom: 1.25rem;
+}
+
+.admin-summary-card {
+    padding: 1.25rem 1.4rem;
+    border-radius: 14px;
+    min-height: 122px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border-left: 6px solid #d0d7de;
+}
+
+    .admin-summary-card::after {
+        content: "";
+        position: absolute;
+        right: -18px;
+        top: -18px;
+        width: 72px;
+        height: 72px;
+        border-radius: 999px;
+        background: rgba(0, 86, 145, 0.05);
+    }
+
+    .admin-summary-card.pending {
+        border-left-color: #ea0016;
+        background: linear-gradient(180deg, #ffffff 0%, #fff6f7 100%);
+    }
+
+        .admin-summary-card.pending::after {
+            background: rgba(234, 0, 22, 0.08);
+        }
+
+    .admin-summary-card.approved {
+        border-left-color: #198754;
+        background: linear-gradient(180deg, #ffffff 0%, #f5fbf7 100%);
+    }
+
+        .admin-summary-card.approved::after {
+            background: rgba(25, 135, 84, 0.08);
+        }
+
+    .admin-summary-card.preparing {
+        border-left-color: #0d6efd;
+        background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+    }
+
+        .admin-summary-card.preparing::after {
+            background: rgba(13, 110, 253, 0.08);
+        }
+
+.admin-summary-label {
+    color: #6b7280;
+    margin-bottom: 0.5rem;
+    position: relative;
+    z-index: 1;
+}
+
+.admin-summary-value {
+    font-weight: 700;
+    font-size: 3rem;
+    line-height: 1;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.admin-status-card {
+    border-radius: 14px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.admin-status-header {
+    padding: 1.1rem 1.35rem 0.9rem 1.35rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
+}
+
+.admin-status-title {
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+}
+
+.admin-status-subtitle {
+    color: #6b7280;
+    line-height: 1.35;
+}
+
+.admin-status-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.85rem;
+    padding: 1rem 1rem 0 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
+}
+
+.admin-status-tab {
+    appearance: none;
+    border: 1px solid #d9dee5;
+    background: #f8fafc;
+    color: #1f2937;
+    border-radius: 12px 12px 0 0;
+    min-height: 62px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+    .admin-status-tab:hover {
+        background: #eef4f8;
+        border-color: #bfd0dd;
+    }
+
+.admin-status-tab-content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.admin-status-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.badge-pending {
+    background: #ea0016;
+}
+
+.badge-approved {
+    background: #198754;
+}
+
+.badge-preparing {
+    background: #0d6efd;
+}
+
+.badge-denied {
+    background: #dc3545;
+}
+
+.badge-collected {
+    background: #005691;
+}
+
+.admin-status-tab.active {
+    background: #eef4f8;
+    border-color: #c5d4df;
+    color: #005691;
+    box-shadow: inset 0 -3px 0 #ea0016;
+}
+
+    .admin-status-tab.active.pending {
+        background: #fff4f5;
+        border-color: #f0c4ca;
+        color: #c70019;
+    }
+
+    .admin-status-tab.active.approved {
+        background: #f4fbf7;
+        border-color: #bfe2cd;
+        color: #198754;
+    }
+
+    .admin-status-tab.active.preparing {
+        background: #f3f8ff;
+        border-color: #bdd3fb;
+        color: #0d6efd;
+    }
+
+    .admin-status-tab.active.denied {
+        background: #fff5f5;
+        border-color: #f0c6cb;
+        color: #c82333;
+    }
+
+    .admin-status-tab.active.collected {
+        background: #f2f7fb;
+        border-color: #bfd6e8;
+        color: #005691;
+    }
+
+.admin-panel-body {
+    padding: 1rem;
+    background: #fff;
+}
+
+.admin-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.25rem 0 0.75rem 0;
+    font-weight: 800;
+}
+
+.admin-section-title + .admin-section-title {
+    margin-top: 1.25rem;
+}
+
+.admin-section-box {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+}
+
+.admin-section-box-header {
+    padding: 0.85rem 1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+@@media (max-width: 1200px) {
+    .admin-status-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@@media (max-width: 850px) {
+    .admin-summary-value {
+        font-size: 2.4rem;
+    }
+
+    .admin-status-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@@media (max-width: 560px) {
+    .admin-status-tabs {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-status-tab {
+        border-radius: 10px;
+        justify-content: flex-start;
+    }
+
+    .admin-status-tab-content {
+        justify-content: flex-start;
+    }
+
+    .admin-panel-body {
+        padding: 0.6rem;
+    }
+}
+
+
+
+</style>
+
+@if (!_isAllowed)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">
+        Du hast keine Berechtigung, diese Seite zu sehen.
+    </MudAlert>
+}
+else
+{
+    <div class="admin-page">
+        <MudText Typo="Typo.h4" Class="admin-title">Anfragen verwalten</MudText>
+        <MudText Typo="Typo.body1" Class="admin-subtitle">
+            @if (_isAdmin)
+            {
+                <span>Du siehst alle Equipment-Anfragen und neuen Bestellungen.</span>
+            }
+            else
+            {
+                <span>Du siehst nur Anfragen und Bestellungen, die dir als Vorgesetztem zugeordnet sind.</span>
+            }
+        </MudText>
+
+        <MudGrid Spacing="3" Class="admin-summary-grid">
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="admin-summary-card pending" Elevation="1">
+                    <MudText Typo="Typo.body2" Class="admin-summary-label">Ausstehend</MudText>
+                    <MudText Typo="Typo.h3" Class="admin-summary-value">@_pendingCount</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="admin-summary-card approved" Elevation="1">
+                    <MudText Typo="Typo.body2" Class="admin-summary-label">Genehmigt</MudText>
+                    <MudText Typo="Typo.h3" Class="admin-summary-value">@_approvedCount</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="admin-summary-card preparing" Elevation="1">
+                    <MudText Typo="Typo.body2" Class="admin-summary-label">In Vorbereitung</MudText>
+                    <MudText Typo="Typo.h3" Class="admin-summary-value">@_preparingCount</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudPaper Class="admin-status-card" Elevation="1">
+            <div class="admin-status-header">
+                <MudText Typo="Typo.h6" Class="admin-status-title">Statusübersicht</MudText>
+                <MudText Typo="Typo.body2" Class="admin-status-subtitle">
+                    Wähle einen Status, um die entsprechenden Anfragen und Bestellungen zu sehen.
+                </MudText>
+            </div>
+
+            <div class="admin-status-tabs">
+                <button type="button"
+                        class="admin-status-tab pending @(IsActive(AdminView.Pending) ? "active" : "")"
+                        @onclick="@(() => SetView(AdminView.Pending))">
+                    <span class="admin-status-tab-content">
+                        <MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" />
+                        <span class="admin-status-tab-label">Ausstehend</span>
+                        <span class="admin-status-badge badge-pending">@_pendingCount</span>
+                    </span>
+                </button>
+
+                <button type="button"
+                        class="admin-status-tab approved @(IsActive(AdminView.Approved) ? "active" : "")"
+                        @onclick="@(() => SetView(AdminView.Approved))">
+                    <span class="admin-status-tab-content">
+                        <MudIcon Icon="@Icons.Material.Filled.ThumbUp" />
+                        <span class="admin-status-tab-label">Genehmigt</span>
+                        <span class="admin-status-badge badge-approved">@_approvedCount</span>
+                    </span>
+                </button>
+
+                <button type="button"
+                        class="admin-status-tab preparing @(IsActive(AdminView.Preparing) ? "active" : "")"
+                        @onclick="@(() => SetView(AdminView.Preparing))">
+                    <span class="admin-status-tab-content">
+                        <MudIcon Icon="@Icons.Material.Filled.Build" />
+                        <span class="admin-status-tab-label">In Vorbereitung</span>
+                        <span class="admin-status-badge badge-preparing">@_preparingCount</span>
+                    </span>
+                </button>
+
+                <button type="button"
+                        class="admin-status-tab denied @(IsActive(AdminView.Denied) ? "active" : "")"
+                        @onclick="@(() => SetView(AdminView.Denied))">
+                    <span class="admin-status-tab-content">
+                        <MudIcon Icon="@Icons.Material.Filled.ThumbDown" />
+                        <span class="admin-status-tab-label">Abgelehnt</span>
+                        <span class="admin-status-badge badge-denied">@(_denied.Count + _orderDenied.Count)</span>
+                    </span>
+                </button>
+
+                <button type="button"
+                        class="admin-status-tab collected @(IsActive(AdminView.Collected) ? "active" : "")"
+                        @onclick="@(() => SetView(AdminView.Collected))">
+                    <span class="admin-status-tab-content">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                        <span class="admin-status-tab-label">Abgeschlossen</span>
+                        <span class="admin-status-badge badge-collected">@(_collected.Count + _orderCompleted.Count + _returnPending.Count)</span>
+                    </span>
+                </button>
+            </div>
+
+            <div class="admin-panel-body">
+                @switch (_currentView)
+                {
+                    case AdminView.Pending:
+                        <OrderSection Title="Neue Bestellungen" Count="@_orderPending.Count">
+                            <OrderRequestsTable @key="@($"orders-pending-{_tableVersion}")"
+                                                Orders="@_orderPending"
+                                                ShowApprove="true"
+                                                ShowDeny="true"
+                                                ActionBusy="_actionBusy"
+                                                OnApprove="ApproveOrderDirect"
+                                                OnDeny="OpenOrderDenyDialog" />
+                        </OrderSection>
+
+                        <OrderSection Title="Legacy-Einzelanfragen" Count="@_pending.Count">
+                            <RequestsTable @key="@($"pending-{_tableVersion}")"
+                                           Requests="@_pending"
+                                           ShowApprove="true"
+                                           ShowDeny="true"
+                                           ActionBusy="_actionBusy"
+                                           OnApprove="ApproveDirect"
+                                           OnDeny="OpenDenyDialog" />
+                        </OrderSection>
+                        break;
+
+                    case AdminView.Approved:
+                        <OrderSection Title="Neue Bestellungen" Count="@_orderApproved.Count">
+                            <OrderRequestsTable @key="@($"orders-approved-{_tableVersion}")"
+                                                Orders="@_orderApproved"
+                                                ShowStartPreparing="@_isAdmin"
+                                                ShowFulfillmentActions="@_isAdmin"
+                                                ShowHandoverActions="@_isAdmin"
+                                                ActionBusy="_actionBusy"
+                                                OnStartPreparing="MarkOrderLinePreparing"
+                                                OnAssignPosition="OpenAssignPositionDialog"
+                                                OnFulfillWithoutStorage="FulfillOrderLineWithoutStorage"
+                                                OnCompleteHandover="CompleteOrderLineHandover" />
+                        </OrderSection>
+
+                        <OrderSection Title="Legacy-Einzelanfragen" Count="@_approved.Count">
+                            <RequestsTable @key="@($"approved-{_tableVersion}")"
+                                           Requests="@_approved"
+                                           ShowPreparing="true"
+                                           ActionBusy="_actionBusy"
+                                           OnPreparing="MarkPreparing" />
+                        </OrderSection>
+                        break;
+
+                    case AdminView.Preparing:
+                        <OrderSection Title="Neue Bestellungen in Bearbeitung" Count="@_orderInProgress.Count">
+                            <OrderRequestsTable @key="@($"orders-progress-{_tableVersion}")"
+                                                Orders="@_orderInProgress"
+                                                ShowStartPreparing="@_isAdmin"
+                                                ShowFulfillmentActions="@_isAdmin"
+                                                ShowHandoverActions="@_isAdmin"
+                                                ActionBusy="_actionBusy"
+                                                OnStartPreparing="MarkOrderLinePreparing"
+                                                OnAssignPosition="OpenAssignPositionDialog"
+                                                OnFulfillWithoutStorage="FulfillOrderLineWithoutStorage"
+                                                OnCompleteHandover="CompleteOrderLineHandover" />
+                        </OrderSection>
+
+                        <OrderSection Title="Legacy-Einzelanfragen" Count="@_preparing.Count">
+                            <RequestsTable @key="@($"preparing-{_tableVersion}")"
+                                           Requests="@_preparing"
+                                           ShowCollected="true"
+                                           ActionBusy="_actionBusy"
+                                           OnCollectedUsed="SendPickupAndCollectUsed"
+                                           OnCollectedNew="OpenNewHandoverDialog" />
+                        </OrderSection>
+                        break;
+
+                    case AdminView.Denied:
+                        <OrderSection Title="Neue Bestellungen" Count="@_orderDenied.Count">
+                            <OrderRequestsTable @key="@($"orders-denied-{_tableVersion}")"
+                                                Orders="@_orderDenied"
+                                                ActionBusy="_actionBusy" />
+                        </OrderSection>
+
+                        <OrderSection Title="Legacy-Einzelanfragen" Count="@_denied.Count">
+                            <RequestsTable @key="@($"denied-{_tableVersion}")"
+                                           Requests="@_denied"
+                                           ActionBusy="_actionBusy" />
+                        </OrderSection>
+                        break;
+
+                    case AdminView.Collected:
+                        <OrderSection Title="Offene Rückgaben" Count="@_returnPending.Count">
+                            <ReturnRequestsTable @key="@($"returns-pending-{_tableVersion}")"
+                                                 Requests="@_returnPending"
+                                                 ShowActions="@_isAdmin"
+                                                 ActionBusy="_actionBusy"
+                                                 OnConfirm="ConfirmReturnRequest"
+                                                 OnCancel="CancelReturnRequest" />
+                        </OrderSection>
+
+                        <OrderSection Title="Neue abgeschlossene Bestellungen" Count="@_orderCompleted.Count">
+                            <OrderRequestsTable @key="@($"orders-completed-{_tableVersion}")"
+                                                Orders="@_orderCompleted"
+                                                ActionBusy="_actionBusy" />
+                        </OrderSection>
+
+                        <OrderSection Title="Legacy-Einzelanfragen" Count="@_collected.Count">
+                            <RequestsTable @key="@($"collected-{_tableVersion}")"
+                                           Requests="@_collected"
+                                           ActionBusy="_actionBusy" />
+                        </OrderSection>
+                        break;
+                }
+            </div>
+        </MudPaper>
+
+        <MudDialog @bind-Visible="_denyDialogOpen">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.ThumbDown" Class="mr-2" Color="Color.Error" />
+                    Anfrage ablehnen
+                </MudText>
+            </TitleContent>
+
+            <DialogContent>
+                <MudText Class="mb-3">
+                    Anfrage von <b>@_denyTarget?.RequesterName</b> ablehnen?
+                    Der Benutzer erhält eine automatische Ablehnungs-Email.
+                </MudText>
+
+                <MudTextField @bind-Value="_denyComment"
+                              Label="Kommentar / Begründung (optional)"
+                              Lines="3"
+                              Variant="Variant.Outlined" />
+            </DialogContent>
+
+            <DialogActions>
+                <MudButton OnClick="@(() => _denyDialogOpen = false)">
+                    Abbrechen
+                </MudButton>
+
+                <MudButton Color="Color.Error"
+                           Variant="Variant.Filled"
+                           StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="ConfirmDeny"
+                           Disabled="_actionBusy">
+                    Ablehnen und Email senden
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+
+        <MudDialog @bind-Visible="_orderDenyDialogOpen">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.ThumbDown" Class="mr-2" Color="Color.Error" />
+                    Bestellung ablehnen
+                </MudText>
+            </TitleContent>
+
+            <DialogContent>
+                <MudText Class="mb-3">
+                    Bestellung <b>@_orderDenyTarget?.DisplayTicketNumber</b> für
+                    <b>@_orderDenyTarget?.RequestedForName</b> ablehnen?
+                    Der Abholkontakt erhält eine automatische Ablehnungs-Email.
+                </MudText>
+
+                <MudTextField @bind-Value="_orderDenyComment"
+                              Label="Kommentar / Begründung (optional)"
+                              Lines="3"
+                              Variant="Variant.Outlined" />
+            </DialogContent>
+
+            <DialogActions>
+                <MudButton OnClick="@(() => _orderDenyDialogOpen = false)">
+                    Abbrechen
+                </MudButton>
+
+                <MudButton Color="Color.Error"
+                           Variant="Variant.Filled"
+                           StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="ConfirmOrderDeny"
+                           Disabled="_actionBusy">
+                    Bestellung ablehnen
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+
+        <MudDialog @bind-Visible="_assignPositionDialogOpen">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Inventory2" Class="mr-2" Color="Color.Primary" />
+                    Lagerposition zuweisen
+                </MudText>
+            </TitleContent>
+
+            <DialogContent>
+                @if (_assignPositionTargetLine is not null)
+                {
+                    <MudText Class="mb-3">
+                        Position für <b>@_assignPositionTargetLine.DisplayName</b> auswählen.
+                    </MudText>
+
+                    @if (_assignPositionOptions.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true">
+                            Keine verfügbare Lagerposition gefunden. Prüfe Lagerbestand, Kategorie-Zuordnung und ob Gebrauchtgeräte akzeptiert wurden.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudSelect T="int"
+                                   @bind-Value="_selectedPositionId"
+                                   Label="Verfügbare Lagerposition"
+                                   Variant="Variant.Outlined"
+                                   Dense="true">
+                            @foreach (var option in _assignPositionOptions)
+                            {
+                                <MudSelectItem T="int" Value="@option.PositionId">
+                                    @option.DisplayText
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                }
+            </DialogContent>
+
+            <DialogActions>
+                <MudButton OnClick="CancelAssignPosition">
+                    Abbrechen
+                </MudButton>
+
+                <MudButton Color="Color.Primary"
+                           Variant="Variant.Filled"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="ConfirmAssignPosition"
+                           Disabled="@(_actionBusy || _assignPositionTargetLine is null || _selectedPositionId <= 0)">
+                    Position zuweisen
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+
+        <MudDialog @bind-Visible="_newHandoverDialogOpen">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" Color="Color.Warning" />
+                    Neuware aus Lagerbestand ausgeben?
+                </MudText>
+            </TitleContent>
+
+            <DialogContent>
+                <MudText Class="mb-3">
+                    Ticket <b>@_newHandoverTarget?.DisplayTicketNumber</b> für
+                    <b>@_newHandoverTarget?.RequesterName</b> als <b>Neu</b> herausgeben?
+                </MudText>
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    Dadurch wird der reservierte Lagergegenstand endgültig ausgebucht und als offener Issue in der Lagerverwaltung angelegt.
+                </MudAlert>
+            </DialogContent>
+
+            <DialogActions>
+                <MudButton OnClick="CancelNewHandover">
+                    Abbrechen
+                </MudButton>
+
+                <MudButton Color="Color.Primary"
+                           Variant="Variant.Filled"
+                           StartIcon="@Icons.Material.Filled.AddBox"
+                           OnClick="ConfirmNewHandover"
+                           Disabled="_actionBusy">
+                    Ja, Neu ausgeben
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+    </div>
+}
+
+@code {
+    private enum AdminView
+    {
+        Pending,
+        Approved,
+        Preparing,
+        Denied,
+        Collected
+    }
+
+    private AdminView _currentView = AdminView.Pending;
+
+    private List<EquipmentRequest> _pending = new();
+    private List<EquipmentRequest> _approved = new();
+    private List<EquipmentRequest> _preparing = new();
+    private List<EquipmentRequest> _denied = new();
+    private List<EquipmentRequest> _collected = new();
+
+    private List<EquipmentOrder> _orderPending = new();
+    private List<EquipmentOrder> _orderApproved = new();
+    private List<EquipmentOrder> _orderInProgress = new();
+    private List<EquipmentOrder> _orderDenied = new();
+    private List<EquipmentOrder> _orderCompleted = new();
+    private List<ReturnRequestRow> _returnPending = new();
+
+    private int _pendingCount => _pending.Count + _orderPending.Count;
+    private int _approvedCount => _approved.Count + _orderApproved.Count;
+    private int _preparingCount => _preparing.Count + _orderInProgress.Count;
+
+    private bool _denyDialogOpen;
+    private string _denyComment = "";
+    private EquipmentRequest? _denyTarget;
+    private bool _orderDenyDialogOpen;
+    private string _orderDenyComment = "";
+    private EquipmentOrder? _orderDenyTarget;
+    private bool _assignPositionDialogOpen;
+    private EquipmentOrderLine? _assignPositionTargetLine;
+    private List<OrderLinePositionOption> _assignPositionOptions = new();
+    private int _selectedPositionId;
+    private bool _newHandoverDialogOpen;
+    private EquipmentRequest? _newHandoverTarget;
+    private bool _actionBusy;
+    private int _tableVersion;
+
+    private bool _isAdmin;
+    private bool _isSupervisor;
+    private bool _isAllowed;
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        _isAdmin = user.IsInRole("Lagerverwaltung.Admin");
+        _isSupervisor = user.IsInRole("Lagerverwaltung.Supervisor");
+        _isAllowed = _isAdmin || _isSupervisor;
+
+        if (!_isAllowed)
+            return;
+
+        if (_isAdmin)
+            await ReloadAll();
+        else
+            await ReloadSupervisor();
+    }
+
+    private async Task ReloadAll()
+    {
+        var currentSite = await CurrentSiteService.GetCurrentSiteAsync();
+        var isSolothurn = string.Equals(currentSite?.Code, "SN", StringComparison.OrdinalIgnoreCase);
+
+        var allRequests = isSolothurn
+            ? await EquipmentSvc.GetRequestsAsync()
+            : new List<EquipmentRequest>();
+
+        var allOrders = await LoadAllOrdersFromDbAsync();
+
+        _returnPending = isSolothurn
+            ? await ReturnSvc.GetReturnRequestsAsync(ReturnRequestStatus.Pending)
+            : new List<ReturnRequestRow>();
+
+        SplitRequests(allRequests);
+        SplitOrders(allOrders);
+    }
+
+    private async Task ReloadSupervisor()
+    {
+        var currentSite = await CurrentSiteService.GetCurrentSiteAsync();
+        var isSolothurn = string.Equals(currentSite?.Code, "SN", StringComparison.OrdinalIgnoreCase);
+
+        var allRequests = isSolothurn
+            ? await EquipmentSvc.GetRequestsForSupervisorAsync(CurrentUser.Email)
+            : new List<EquipmentRequest>();
+
+        var allOrders = (await LoadAllOrdersFromDbAsync())
+            .Where(o => IsSameEmail(o.SupervisorEmail, CurrentUser.Email))
+            .ToList();
+
+        _returnPending = new List<ReturnRequestRow>();
+
+        SplitRequests(allRequests);
+        SplitOrders(allOrders);
+    }
+
+    private async Task<List<EquipmentOrder>> LoadAllOrdersFromDbAsync()
+    {
+        var currentSiteId = await CurrentSiteService.GetCurrentSiteIdAsync();
+
+        if (currentSiteId is null)
+            return new List<EquipmentOrder>();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        return await db.EquipmentOrders
+            .AsNoTracking()
+            .Include(o => o.Site)
+            .Include(o => o.Lines)
+            .Where(o => o.SiteId == currentSiteId.Value)
+            .OrderByDescending(o => o.CreatedAt)
+            .ThenByDescending(o => o.Id)
+            .ToListAsync();
+    }
+
+    private static bool IsSameEmail(string? left, string? right)
+    {
+        return string.Equals(
+            (left ?? string.Empty).Trim(),
+            (right ?? string.Empty).Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void SplitRequests(List<EquipmentRequest> all)
+    {
+        _pending = all.Where(r => r.Status == RequestStatus.Pending).ToList();
+        _approved = all.Where(r => r.Status == RequestStatus.Approved).ToList();
+        _preparing = all.Where(r => r.Status == RequestStatus.Preparing).ToList();
+        _denied = all.Where(r => r.Status == RequestStatus.Denied).ToList();
+        _collected = all.Where(r => r.Status == RequestStatus.Collected).ToList();
+    }
+
+    private void SplitOrders(List<EquipmentOrder> all)
+    {
+        _orderPending = all.Where(o => o.Status == OrderStatus.PendingApproval).ToList();
+        _orderApproved = all.Where(o => o.Status == OrderStatus.Approved).ToList();
+        _orderInProgress = all.Where(o => o.Status == OrderStatus.PartiallyFulfilled).ToList();
+        _orderDenied = all.Where(o => o.Status == OrderStatus.Denied || o.Status == OrderStatus.Cancelled).ToList();
+        _orderCompleted = all.Where(o => o.Status == OrderStatus.Completed).ToList();
+    }
+
+    private async Task Reload()
+    {
+        if (_isAdmin)
+            await ReloadAll();
+        else
+            await ReloadSupervisor();
+    }
+    private async Task ReloadAndRender()
+    {
+        await Reload();
+
+
+        _tableVersion++;
+
+
+        await InvokeAsync(StateHasChanged);
+    }
+    private void SetView(AdminView view)
+    {
+        _currentView = view;
+    }
+
+    private bool IsActive(AdminView view) => _currentView == view;
+
+    private async Task ApproveDirect(EquipmentRequest req)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await EquipmentSvc.ApproveAsync(
+                req.Id,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(
+                $"Anfrage {req.DisplayTicketNumber} von {req.RequesterName} genehmigt. IT wurde benachrichtigt.",
+                Severity.Success);
+
+            _currentView = AdminView.Approved;
+
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ApproveOrderDirect(EquipmentOrder order)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await OrderSvc.ApproveAsync(
+                order.Id,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(
+                $"Bestellung {order.DisplayTicketNumber} genehmigt. IT wurde benachrichtigt.",
+                string.IsNullOrWhiteSpace(error) ? Severity.Success : Severity.Warning);
+
+            if (!string.IsNullOrWhiteSpace(error))
+                Snackbar.Add(error, Severity.Warning);
+
+            _currentView = AdminView.Approved;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OpenOrderDenyDialog(EquipmentOrder order)
+    {
+        _orderDenyTarget = order;
+        _orderDenyComment = "";
+        _orderDenyDialogOpen = true;
+    }
+
+    private async Task MarkOrderLinePreparing(EquipmentOrderLine line)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await OrderSvc.MarkLinePreparingAsync(
+                line.EquipmentOrderId,
+                line.Id,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Bestellposition {line.DisplayName}: Status auf In Vorbereitung gesetzt.", Severity.Info);
+
+            _currentView = AdminView.Preparing;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenAssignPositionDialog(EquipmentOrderLine line)
+    {
+        if (_actionBusy)
+            return;
+
+        // Reset the dialog state before loading options. Without this, a failed lookup
+        // can leave the previously selected line visible in the dialog.
+        _assignPositionDialogOpen = false;
+        _assignPositionTargetLine = line;
+        _assignPositionOptions = new();
+        _selectedPositionId = 0;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error, positions) = await OrderSvc.GetAvailablePositionsForLineAsync(
+                line.EquipmentOrderId,
+                line.Id,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                _assignPositionTargetLine = null;
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            _assignPositionOptions = positions;
+            _selectedPositionId = positions.FirstOrDefault()?.PositionId ?? 0;
+            _assignPositionDialogOpen = true;
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CancelAssignPosition()
+    {
+        _assignPositionDialogOpen = false;
+        _assignPositionTargetLine = null;
+        _assignPositionOptions = new();
+        _selectedPositionId = 0;
+    }
+
+    private async Task ConfirmAssignPosition()
+    {
+        if (_assignPositionTargetLine is null || _selectedPositionId <= 0 || _actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await OrderSvc.AssignPositionToLineAsync(
+                _assignPositionTargetLine.EquipmentOrderId,
+                _assignPositionTargetLine.Id,
+                _selectedPositionId,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Lagerposition #{_selectedPositionId} wurde zugewiesen. Die Position ist jetzt abholbereit.", Severity.Success);
+
+            CancelAssignPosition();
+            _currentView = AdminView.Preparing;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task FulfillOrderLineWithoutStorage(EquipmentOrderLine line)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await OrderSvc.FulfillLineWithoutStorageAsync(
+                line.EquipmentOrderId,
+                line.Id,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Bestellposition {line.DisplayName} wurde manuell ohne Lager erfüllt.", Severity.Success);
+            _currentView = AdminView.Preparing;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CompleteOrderLineHandover(EquipmentOrderLine line)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await OrderSvc.CompleteLineHandoverAsync(
+                line.EquipmentOrderId,
+                line.Id,
+                CurrentUser.Email,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Bestellposition {line.DisplayName} wurde ausgegeben. Ein Issue wurde erstellt.", Severity.Success);
+            _currentView = AdminView.Preparing;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ConfirmOrderDeny()
+    {
+        if (_orderDenyTarget is null || _actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await OrderSvc.DenyAsync(
+                _orderDenyTarget.Id,
+                CurrentUser.Email,
+                _isAdmin,
+                _orderDenyComment);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(
+                $"Bestellung {_orderDenyTarget.DisplayTicketNumber} abgelehnt.",
+                string.IsNullOrWhiteSpace(error) ? Severity.Warning : Severity.Info);
+
+            if (!string.IsNullOrWhiteSpace(error))
+                Snackbar.Add(error, Severity.Warning);
+
+            _orderDenyDialogOpen = false;
+            _orderDenyTarget = null;
+            _orderDenyComment = "";
+
+            _currentView = AdminView.Denied;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ConfirmReturnRequest(ReturnRequestRow row)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await ReturnSvc.ConfirmReturnAsync(row.ReturnRequestId, " ");
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Rückgabe für {row.TicketNumber} wurde bestätigt.", Severity.Success);
+            _currentView = AdminView.Collected;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CancelReturnRequest(ReturnRequestRow row)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await ReturnSvc.CancelReturnAsync(row.ReturnRequestId, "Abgebrochen im Admin-Bereich.");
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Rückgabe für {row.TicketNumber} wurde abgebrochen.", Severity.Warning);
+            _currentView = AdminView.Collected;
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OpenDenyDialog(EquipmentRequest req)
+    {
+        _denyTarget = req;
+        _denyComment = "";
+        _denyDialogOpen = true;
+    }
+
+    private async Task ConfirmDeny()
+    {
+        if (_denyTarget is null || _actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await EquipmentSvc.DenyAsync(
+                _denyTarget.Id,
+                CurrentUser.Email,
+                _isAdmin,
+                _denyComment);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(
+                $"Anfrage {_denyTarget.DisplayTicketNumber} abgelehnt. {_denyTarget.RequesterName} wurde benachrichtigt.",
+                Severity.Warning);
+
+            _denyDialogOpen = false;
+            _denyTarget = null;
+            _denyComment = "";
+
+            _currentView = AdminView.Denied;
+
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task MarkPreparing(EquipmentRequest req)
+    {
+        if (_actionBusy)
+            return;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await EquipmentSvc.MarkPreparingAsync(
+                req.Id,
+                _isAdmin);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"{req.DisplayTicketNumber}: Status auf In Vorbereitung gesetzt.", Severity.Info);
+
+            _currentView = AdminView.Preparing;
+
+            await ReloadAndRender();
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OpenNewHandoverDialog(EquipmentRequest req)
+    {
+        _newHandoverTarget = req;
+        _newHandoverDialogOpen = true;
+    } 
+    
+
+    private void CancelNewHandover()
+    {
+        _newHandoverDialogOpen = false;
+        _newHandoverTarget = null;
+    }
+
+    private async Task ConfirmNewHandover()
+    {
+        if (_newHandoverTarget is null)
+            return;
+
+        var ok = await CompleteHandover(
+            _newHandoverTarget,
+            RequestFulfillmentType.NewFromStock);
+
+        if (ok)
+            CancelNewHandover();
+    }
+
+    private async Task SendPickupAndCollectUsed(EquipmentRequest req)
+    {
+        await CompleteHandover(req, RequestFulfillmentType.UsedReturnedItem);
+    }
+
+    private async Task<bool> CompleteHandover(
+        EquipmentRequest req,
+        RequestFulfillmentType fulfillmentType)
+    {
+        if (_actionBusy)
+            return false;
+
+        _actionBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var (ok, error) = await EquipmentSvc.CompleteHandoverAsync(
+                req.Id,
+                _isAdmin,
+                fulfillmentType);
+
+            if (!ok)
+            {
+                Snackbar.Add(error, Severity.Error);
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                Snackbar.Add(error, Severity.Warning);
+            }
+
+            if (fulfillmentType == RequestFulfillmentType.NewFromStock)
+            {
+                Snackbar.Add(
+                    $"{req.DisplayTicketNumber}: Neuware wurde aus dem Lager ausgebucht.",
+                    Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(
+                    $"{req.DisplayTicketNumber}: Gebrauchtgerät wurde aus dem Lager ausgegeben.",
+                    Severity.Success);
+            }
+
+            _currentView = AdminView.Collected;
+
+            await ReloadAndRender();
+            return true;
+        }
+        finally
+        {
+            _actionBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

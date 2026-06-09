@@ -1,0 +1,25 @@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="Lagerverwaltung.Web.styles.css?v=bling-fixed-v6" rel="stylesheet" />
+
+    <link rel="icon" href="assets/favicon/it-equipment-favicon.ico?v=2" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="assets/favicon/it-equipment-favicon.svg?v=2" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/it-equipment-favicon-180.png?v=2" />
+
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
+</html>

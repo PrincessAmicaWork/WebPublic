@@ -1,0 +1,259 @@
+@page "/legacy-catalog"
+@inject IEquipmentService EquipmentSvc
+@inject IDialogService DialogSvc
+@using Lagerverwaltung.Web.Components.Dialogs
+@using System.Globalization
+
+<PageTitle>Legacy Katalog – Lagerverwaltung</PageTitle>
+
+<div class="catalog-page">
+    <MudText Typo="Typo.h4" Class="mb-1" Style="font-weight:700;">Legacy Equipment-Katalog</MudText>
+    <MudText Typo="Typo.body1" Class="mb-3" Style="color:#666;">
+        Dieser alte Einzelanfrage-Flow bleibt nur für Übergangsfälle erhalten.
+        Neue Bestellungen sollen über den neuen Bestellflow erfasst werden.
+    </MudText>
+
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+        Legacy-Seite: Dieser Flow erstellt alte Einzelanfragen und reserviert Lagerpositionen sofort.
+        Für normale Bestellungen bitte <MudLink Href="/order">Neue Bestellung</MudLink> verwenden.
+    </MudAlert>
+
+    <MudPaper Class="pa-4 mb-4 catalog-filters" Elevation="1">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.caption" Class="filter-label">Kategorie</MudText>
+                <MudSelect T="int?"
+                           Value="_selectedCategoryId"
+                           ValueChanged="OnCategoryChanged"
+                           Variant="Variant.Outlined"
+                           Dense="true"
+                           Clearable="true">
+                    <MudSelectItem T="int?" Value="@((int?)null)">Alle Kategorien</MudSelectItem>
+                    @foreach (var cat in _categories)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)cat.ID)">
+                            @(cat.Name?.Trim() ?? "")
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="8">
+                <MudText Typo="Typo.caption" Class="filter-label">Suche</MudText>
+                <MudTextField T="string"
+                              @bind-Value="_search"
+                              Placeholder="Beschreibung oder Kategorie ..."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Immediate="true"
+                              DebounceInterval="350"
+                              OnDebounceIntervalElapsed="@(async _ => await LoadCatalog())"
+                              Clearable="true"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudCheckBox T="bool"
+                             Value="_onlyAvailable"
+                             ValueChanged="OnOnlyAvailableChanged"
+                             Label="Nur verfügbare anzeigen"
+                             Color="Color.Primary" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_onlyAvailable)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            Es werden nur verfügbare Geräte angezeigt.
+        </MudAlert>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mb-4" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Verfügbar</MudChip>
+        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">Reserviert</MudChip>
+        <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled">Ausgegeben</MudChip>
+        <MudSpacer />
+        <MudText Typo="Typo.caption" Style="color:#666;">
+            @_catalog.Count Artikelgruppe(n)
+        </MudText>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-center pa-8">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" />
+        </div>
+    }
+    else if (!_catalog.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-2">
+            Keine Legacy-Equipment-Positionen gefunden. Filter anpassen oder Administrator kontaktieren.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_catalog"
+                  Dense="false"
+                  Hover="true"
+                  Striped="true"
+                  Breakpoint="Breakpoint.Md"
+                  FixedHeader="true"
+                  Class="catalog-table"
+                  Style="border-radius:16px;overflow:hidden;"
+                  Elevation="2">
+            <HeaderContent>
+                <MudTh>Kategorie</MudTh>
+                <MudTh>Beschreibung</MudTh>
+                <MudTh Style="text-align:right;">Preis</MudTh>
+                <MudTh Style="text-align:center;">Verfügbar</MudTh>
+                <MudTh Style="text-align:center;">Status</MudTh>
+                <MudTh Style="text-align:center;">Aktion</MudTh>
+            </HeaderContent>
+
+            <RowTemplate>
+                <MudTd DataLabel="Kategorie">
+                    <MudText Typo="Typo.body2" Style="font-weight:600;color:#005691;">
+                        @(context.CategoryName?.Trim() ?? "")
+                    </MudText>
+                </MudTd>
+
+                <MudTd DataLabel="Beschreibung">
+                    @(context.Description?.Trim() ?? "")
+                </MudTd>
+
+
+                <MudTd DataLabel="Preis" Style="text-align:right;">
+                    <MudText Typo="Typo.body2" Style="color:#444;">
+                        @context.Price.ToString("C", new CultureInfo("de-CH"))
+                    </MudText>
+                </MudTd>
+
+                <MudTd DataLabel="Verfügbar" Style="text-align:center;">
+                    <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                        <MudChip T="string"
+                                 Color="@(context.AvailableCount > 0 ? Color.Success : Color.Default)"
+                                 Size="Size.Small"
+                                 Variant="Variant.Outlined">
+                            @context.AvailableCount / @context.TotalCount
+                        </MudChip>
+                        <MudText Typo="Typo.caption" Style="color:#666;">
+                            Neu @context.NewAvailableCount · Gebraucht @context.UsedAvailableCount
+                        </MudText>
+                    </MudStack>
+                </MudTd>
+
+                <MudTd DataLabel="Status" Style="text-align:center;">
+                    @switch (context.Availability)
+                    {
+                        case PositionAvailability.Available:
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Verfügbar</MudChip>
+                            break;
+
+                        case PositionAvailability.Reserved:
+                            <MudTooltip Text="Aktuell angefragt – sobald wieder ein freier Posten existiert, kann bestellt werden">
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">Reserviert</MudChip>
+                            </MudTooltip>
+                            break;
+
+                        case PositionAvailability.Unavailable:
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled">Ausgegeben</MudChip>
+                            break;
+                    }
+                </MudTd>
+
+                <MudTd DataLabel="Aktion" Style="text-align:center;">
+                    @if (context.Availability == PositionAvailability.Available && context.AvailableCount > 0)
+                    {
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.AddShoppingCart"
+                                   OnClick="@(() => OpenRequestDialog(context))">
+                            Anfragen
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Style="color:#bbb;">–</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</div>
+
+@code {
+    private List<Category> _categories = new();
+    private List<CatalogItem> _catalog = new();
+    private int? _selectedCategoryId;
+    private string _search = "";
+    private bool _loading = true;
+    private bool _onlyAvailable = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await EquipmentSvc.GetCategoriesAsync();
+        await LoadCatalog();
+    }
+
+    private async Task LoadCatalog()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var data = await EquipmentSvc.GetCatalogAsync(
+                _selectedCategoryId,
+                string.IsNullOrWhiteSpace(_search) ? null : _search.Trim());
+
+            if (_onlyAvailable)
+            {
+                data = data
+                    .Where(x => x.Availability == PositionAvailability.Available && x.AvailableCount > 0)
+                    .ToList();
+            }
+
+            _catalog = data;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnCategoryChanged(int? value)
+    {
+        _selectedCategoryId = value;
+        await LoadCatalog();
+    }
+
+    private async Task OnOnlyAvailableChanged(bool value)
+    {
+        _onlyAvailable = value;
+        await LoadCatalog();
+    }
+
+    private async Task OpenRequestDialog(CatalogItem item)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Item", item }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogSvc.ShowAsync<RequestDialog>("Equipment anfragen", parameters, options);
+        var result = await dialog.Result;
+
+        if (result?.Canceled == false)
+            await LoadCatalog();
+    }
+}

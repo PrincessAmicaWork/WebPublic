@@ -1,0 +1,447 @@
+﻿/* ─── "Show again" restore button ────────────────────────────────── */
+.inventory-status-restore {
+    align-self: flex-start;
+    margin-left: auto;
+    border: 1px solid rgba(0, 86, 145, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #005691;
+    font-size: 0.76rem;
+    font-weight: 800;
+    padding: 0.35rem 0.8rem;
+    box-shadow: 0 6px 18px rgba(0, 53, 93, 0.1);
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+    .inventory-status-restore:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(0, 53, 93, 0.16);
+    }
+
+/* ─── Visual Container ────────────────────────────────────────────── */
+.inventory-status-visual {
+    --status-real: 1;
+    --status-imag: 0;
+    --availability: 0;
+    --glow-x: 66%;
+    --glow-y: 42%;
+    --glow-scale: 1;
+    --spark-x: 0px;
+    --spark-y: 0px;
+    --prism-angle: 0deg;
+    --attention: 0;
+    --spin-speed: 12s;
+    --cube-x: 22deg;
+    --cube-y: -28deg;
+    --cube-z: 8deg;
+    position: relative;
+    z-index: 50;
+    isolation: isolate;
+    flex: 0 1 clamp(340px, 34vw, 500px);
+    width: clamp(340px, 34vw, 500px);
+    height: 158px;
+    margin-left: auto;
+    pointer-events: none;
+    overflow: visible;
+    transform: translateY(0);
+    transition: transform 0.2s ease, width 0.2s ease, flex-basis 0.2s ease, opacity 0.2s ease;
+    transform-style: preserve-3d;
+    perspective: 1000px;
+}
+
+.inventory-status-visual--lower {
+    transform: translateY(22px);
+    margin-bottom: 22px;
+}
+
+.inventory-status-visual--compact {
+    flex-basis: 172px;
+    width: 172px;
+}
+
+/* Atmospheric colour-prism glow behind the whole widget */
+.inventory-status-visual::before {
+    content: "";
+    position: absolute;
+    inset: 4% -2% -10% 14%;
+    z-index: -1;
+    border-radius: 60%;
+    background: radial-gradient(circle at var(--glow-x) var(--glow-y), rgba(44, 179, 74, 0.22), transparent 40%), radial-gradient(circle at 78% 55%, rgba(0, 142, 207, 0.2), transparent 44%), radial-gradient(circle at 30% 70%, rgba(234, 0, 22, 0.1), transparent 36%), conic-gradient( from var(--prism-angle), rgba(234, 0, 22, 0.07), rgba(0, 86, 145, 0.12), rgba(44, 179, 74, 0.12), rgba(111, 66, 193, 0.08), rgba(234, 0, 22, 0.07) );
+    filter: blur(20px);
+    opacity: 0.92;
+    transform: scale(var(--glow-scale));
+    animation: inventory-status-prism 14s linear infinite;
+}
+
+/* ─── Control buttons ─────────────────────────────────────────────── */
+.inventory-status-visual__controls {
+    position: absolute;
+    top: -0.4rem;
+    right: 0.1rem;
+    z-index: 10;
+    display: inline-flex;
+    gap: 0.25rem;
+    pointer-events: auto;
+}
+
+    .inventory-status-visual__controls button {
+        min-width: 2rem;
+        height: 1.7rem;
+        border: 1px solid rgba(0, 86, 145, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        color: #005691;
+        font-size: 0.68rem;
+        font-weight: 900;
+        line-height: 1;
+        box-shadow: 0 6px 16px rgba(0, 53, 93, 0.12);
+        backdrop-filter: blur(12px);
+        cursor: pointer;
+        transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+
+        .inventory-status-visual__controls button:hover {
+            background: #ffffff;
+            box-shadow: 0 10px 24px rgba(0, 53, 93, 0.18);
+            transform: translateY(-1px);
+        }
+
+    .inventory-status-visual__controls .inventory-status-visual__close {
+        color: #ea0016;
+    }
+
+/* ─── Info card (left side of the widget) ────────────────────────── */
+.inventory-status-visual__copy {
+    position: absolute;
+    top: 0.5rem;
+    left: 0;
+    right: 9rem;
+    min-width: 0;
+    padding: 0.72rem 0.88rem;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 8px 28px rgba(0, 53, 93, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(14px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.inventory-status-visual--compact .inventory-status-visual__copy {
+    opacity: 0;
+    transform: translateX(10px) scale(0.96);
+    pointer-events: none;
+}
+
+
+.inventory-status-visual__copy ::deep .inventory-status-visual__eyebrow {
+    color: #005691;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    font-size: 0.68rem;
+}
+
+.inventory-status-visual__copy ::deep .inventory-status-visual__title {
+    color: #0f1d2b;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    font-size: 0.88rem;
+}
+
+.inventory-status-visual__copy ::deep .inventory-status-visual__chips {
+    margin-top: 0.5rem;
+}
+
+/* ─── 3-D Stage ───────────────────────────────────────────────────── */
+.inventory-status-visual__stage {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 152px;
+    height: 152px;
+    perspective: 800px;
+    transform: translateY(-50%);
+    transform-style: preserve-3d;
+}
+
+/* ─── Rings & Waves ───────────────────────────────────────────────── */
+.inventory-status-ring,
+.inventory-status-wave {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.inventory-status-ring--outer {
+    width: 148px;
+    height: 148px;
+    border: 1.5px solid rgba(0, 86, 145, 0.28);
+    box-shadow: 0 0 32px rgba(0, 86, 145, 0.12), inset 0 0 28px rgba(255, 255, 255, 0.6);
+    animation: inventory-status-ring-spin 9s linear infinite;
+}
+
+.inventory-status-ring--inner {
+    width: 104px;
+    height: 104px;
+    border: 1px dashed rgba(44, 179, 74, 0.42);
+    box-shadow: 0 0 16px rgba(44, 179, 74, 0.1);
+    animation: inventory-status-ring-spin 6.2s linear infinite reverse;
+}
+
+.inventory-status-wave--one {
+    width: 164px;
+    height: 60px;
+    border: 2px solid rgba(44, 179, 74, 0.24);
+    transform: translate(-50%, -50%) rotateX(72deg) rotateZ(12deg);
+    animation: inventory-status-orbit 5.6s ease-in-out infinite;
+}
+
+.inventory-status-wave--two {
+    width: 136px;
+    height: 90px;
+    border: 1.5px solid rgba(0, 142, 207, 0.22);
+    transform: translate(-50%, -50%) rotateX(68deg) rotateZ(82deg);
+    animation: inventory-status-orbit 6.8s ease-in-out infinite reverse;
+}
+
+/* ─── Floating Sparks ─────────────────────────────────────────────── */
+.inventory-status-spark {
+    position: absolute;
+    z-index: 3;
+    display: block;
+    border-radius: 999px;
+    background: white;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.95), 0 0 16px rgba(0, 142, 207, 0.55), 0 0 28px rgba(44, 179, 74, 0.3);
+    animation: inventory-status-sparkle 4s ease-in-out infinite;
+}
+
+/* ─── Cube Shell & Cube ───────────────────────────────────────────── */
+.inventory-status-cube-shell {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 78px;
+    height: 78px;
+    transform: translate(-50%, -50%);
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+}
+
+.inventory-status-cube {
+    position: relative;
+    width: 78px;
+    height: 78px;
+    transform-style: preserve-3d;
+    transform: rotateX(var(--cube-x)) rotateY(var(--cube-y)) rotateZ(var(--cube-z));
+    animation: inventory-status-cube-spin var(--spin-speed) linear infinite;
+}
+
+/* ─── Cube Faces ──────────────────────────────────────────────────── */
+/*
+ *  Each face now carries a distinct colour so the cube reads as a
+ *  multi-metric data object rather than a plain monochrome block.
+ *
+ *  front  = frei (available)  → green
+ *  back   = gesamt (total)    → brand blue
+ *  right  = neu (new)         → sky blue
+ *  left   = gebraucht (used)  → amber
+ *  top    = kritisch          → red
+ *  bottom = Rückgaben         → indigo
+ */
+.inventory-status-cube__face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.06rem;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 14px;
+    color: white;
+    text-align: center;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 12px 26px rgba(0, 0, 0, 0.18);
+    backface-visibility: hidden;
+}
+
+/* Individual face colour themes */
+.inventory-status-cube__face--front {
+    background: linear-gradient(135deg, #2cb34a 0%, #1a8035 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 28px rgba(44, 179, 74, 0.45);
+}
+
+.inventory-status-cube__face--back {
+    background: linear-gradient(135deg, #1a6db5 0%, #003a61 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 28px rgba(0, 86, 145, 0.5);
+}
+
+.inventory-status-cube__face--right {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 24px rgba(14, 165, 233, 0.45);
+}
+
+.inventory-status-cube__face--left {
+    background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 24px rgba(245, 158, 11, 0.45);
+}
+
+.inventory-status-cube__face--top {
+    background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 24px rgba(239, 68, 68, 0.5);
+}
+
+.inventory-status-cube__face--bottom {
+    background: linear-gradient(135deg, #818cf8 0%, #4338ca 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 24px rgba(99, 102, 241, 0.45);
+}
+
+/* Face transforms */
+.inventory-status-cube__face--front {
+    transform: translateZ(39px);
+}
+
+.inventory-status-cube__face--back {
+    transform: rotateY(180deg) translateZ(39px);
+}
+
+.inventory-status-cube__face--right {
+    transform: rotateY(90deg) translateZ(39px);
+}
+
+.inventory-status-cube__face--left {
+    transform: rotateY(-90deg) translateZ(39px);
+}
+
+.inventory-status-cube__face--top {
+    transform: rotateX(90deg) translateZ(39px);
+}
+
+.inventory-status-cube__face--bottom {
+    transform: rotateX(-90deg) translateZ(39px);
+}
+
+/* Text inside each face */
+.inventory-status-cube__value {
+    font-size: 1.12rem;
+    font-weight: 950;
+    letter-spacing: -0.05em;
+    line-height: 1;
+}
+
+.inventory-status-cube__label {
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.44rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* ─── Animations ──────────────────────────────────────────────────── */
+@keyframes inventory-status-prism {
+    to {
+        transform: rotate(360deg) scale(var(--glow-scale));
+    }
+}
+
+@keyframes inventory-status-ring-spin {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+@keyframes inventory-status-orbit {
+    0%, 100% {
+        opacity: 0.45;
+        filter: blur(0px);
+    }
+
+    50% {
+        opacity: 1;
+        filter: blur(0.6px);
+    }
+}
+
+@keyframes inventory-status-sparkle {
+    0%, 100% {
+        transform: translate3d(0, 0, 16px) scale(0.75);
+        filter: blur(0px);
+        opacity: 0.6;
+    }
+
+    45% {
+        transform: translate3d(var(--spark-x), var(--spark-y), 44px) scale(1.4);
+        filter: blur(0.3px);
+        opacity: 1;
+    }
+}
+
+@keyframes inventory-status-cube-spin {
+    0% {
+        transform: rotateX(var(--cube-x)) rotateY(var(--cube-y)) rotateZ(var(--cube-z));
+    }
+
+    100% {
+        transform: rotateX(calc(var(--cube-x) + 360deg)) rotateY(calc(var(--cube-y) + 720deg)) rotateZ(calc(var(--cube-z) + 360deg));
+    }
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+    .inventory-status-visual {
+        flex-basis: 100%;
+        width: 100%;
+        max-width: 580px;
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 720px) {
+    .inventory-status-visual {
+        height: 268px;
+    }
+
+    .inventory-status-visual__copy {
+        top: 0.4rem;
+        left: 0;
+        right: 0;
+    }
+
+    .inventory-status-visual__stage {
+        top: auto;
+        right: 50%;
+        bottom: 0;
+        transform: translateX(50%);
+    }
+
+    .inventory-status-visual--compact {
+        height: 158px;
+        width: 172px;
+        max-width: 172px;
+        flex-basis: 172px;
+    }
+}
+
+/* ─── Reduced Motion ──────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .inventory-status-visual,
+    .inventory-status-visual::before,
+    .inventory-status-ring,
+    .inventory-status-wave,
+    .inventory-status-spark,
+    .inventory-status-cube,
+    .inventory-status-visual__controls button,
+    .inventory-status-visual__copy,
+    .inventory-status-restore {
+        animation: none !important;
+        transition: none !important;
+    }
+}

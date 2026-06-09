@@ -1,0 +1,426 @@
+@using Lagerverwaltung.Web.Models
+
+<MudTable Items="@Orders"
+          Hover="true"
+          Dense="true"
+          Breakpoint="Breakpoint.Md"
+          Elevation="0"
+          Class="order-requests-table">
+
+    <HeaderContent>
+        <MudTh>Ticket</MudTh>
+        <MudTh>Datum</MudTh>
+        <MudTh>Bestellt von</MudTh>
+        <MudTh>Für</MudTh>
+        <MudTh>Vorgesetzter</MudTh>
+        <MudTh>Positionen</MudTh>
+        <MudTh>Kosten</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Kommentar</MudTh>
+
+        @if (ShowApprove || ShowDeny)
+        {
+            <MudTh>Aktionen</MudTh>
+        }
+    </HeaderContent>
+
+    <RowTemplate Context="order">
+        <MudTd DataLabel="Ticket">
+            <MudText Typo="Typo.body2" Style="font-family:monospace;font-weight:700;">
+                @order.DisplayTicketNumber
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Datum">
+            <MudText Typo="Typo.caption">
+                @order.CreatedAt.ToString("dd.MM.yyyy HH:mm")
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Bestellt von">
+            <MudText Typo="Typo.body2">@order.OrderedByName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@order.OrderedByEmail</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Für">
+            <MudText Typo="Typo.body2">@order.RequestedForName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@order.RequestedForEmail</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                Kontakt: @order.PickupContactName
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Vorgesetzter">
+            <MudText Typo="Typo.body2">@order.SupervisorName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@order.SupervisorEmail</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Positionen">
+            <MudStack Spacing="1">
+                @foreach (var line in order.Lines.OrderBy(x => x.Id))
+                {
+                    <MudPaper Class="order-line-card pa-2" Elevation="0">
+                        <MudText Typo="Typo.body2" Style="font-weight:700;">
+                            @line.DisplayName
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @line.CategoryName · Menge @line.Quantity · @FulfillmentLabel(line.EffectiveFulfillmentMode)
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                            Line-Status: @LineStatusLabel(line.Status)
+                        </MudText>
+                        @if (line.PositionId.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                                Lagerposition: #@line.PositionId
+                            </MudText>
+                        }
+                        @if (ShowStartPreparing && line.Status == OrderLineStatus.Open && OnStartPreparing.HasDelegate)
+                        {
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Build"
+                                       Disabled="@ActionBusy"
+                                       Class="mt-2"
+                                       OnClick="@(() => HandleStartPreparing(line))">
+                                In Vorbereitung nehmen
+                            </MudButton>
+                        }
+                        @if (ShowFulfillmentActions && line.Status == OrderLineStatus.Preparing)
+                        {
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-2">
+                                @if (line.EffectiveFulfillmentMode == EffectiveFulfillmentMode.UseStorage && OnAssignPosition.HasDelegate)
+                                {
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Inventory2"
+                                               Disabled="@ActionBusy"
+                                               OnClick="@(() => HandleAssignPosition(line))">
+                                        Position zuweisen
+                                    </MudButton>
+                                }
+                                else if (CanFulfillWithoutStorage(line) && OnFulfillWithoutStorage.HasDelegate)
+                                {
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Filled"
+                                               Color="Color.Success"
+                                               StartIcon="@Icons.Material.Filled.TaskAlt"
+                                               Disabled="@ActionBusy"
+                                               OnClick="@(() => HandleFulfillWithoutStorage(line))">
+                                        Manuell abschließen
+                                    </MudButton>
+                                }
+                            </MudStack>
+                        }
+                        @if (ShowHandoverActions && line.Status == OrderLineStatus.ReadyForPickup && CanCompleteHandover(line) && OnCompleteHandover.HasDelegate)
+                        {
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Success"
+                                       StartIcon="@Icons.Material.Filled.CheckCircle"
+                                       Disabled="@ActionBusy"
+                                       Class="mt-2"
+                                       OnClick="@(() => HandleCompleteHandover(line))">
+                                Ausgeben
+                            </MudButton>
+                        }
+                        @if (ShowReturnActions && CanRequestReturn(line))
+                        {
+                            <div class="mt-2">
+                                @if (OrderLineReturnStatuses.TryGetValue(line.Id, out var returnStatus))
+                                {
+                                    <MudChip T="string" Color="@ReturnStatusColor(returnStatus)" Size="Size.Small">
+                                        @ReturnStatusLabel(returnStatus)
+                                    </MudChip>
+                                }
+                                else if (OnRequestReturn.HasDelegate)
+                                {
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Outlined"
+                                               Color="Color.Secondary"
+                                               StartIcon="@Icons.Material.Filled.KeyboardReturn"
+                                               Disabled="@ActionBusy"
+                                               OnClick="@(() => HandleRequestReturn(line))">
+                                        Rückgabe anmelden
+                                    </MudButton>
+                                }
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(line.UserComment) && line.UserComment != " ")
+                        {
+                            <MudText Typo="Typo.caption" Class="d-block mt-1">
+                                Notiz: @line.UserComment
+                            </MudText>
+                        }
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudTd>
+
+        <MudTd DataLabel="Kosten">
+            <MudText Typo="Typo.caption" Class="d-block">
+                Einmalig: @Currency(order) @OneTimeTotal(order).ToString("0.00")
+            </MudText>
+            <MudText Typo="Typo.caption" Class="d-block">
+                Monatlich: @Currency(order) @MonthlyTotal(order).ToString("0.00")
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                Ohne: @NoCostLines(order)
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Color="@OrderStatusColor(order.Status)" Size="Size.Small" Variant="Variant.Filled">
+                @OrderStatusLabel(order.Status)
+            </MudChip>
+        </MudTd>
+
+        <MudTd DataLabel="Kommentar">
+            @if (!string.IsNullOrWhiteSpace(order.BossComment) && order.BossComment != " ")
+            {
+                @order.BossComment
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+            }
+        </MudTd>
+
+        @if (ShowApprove || ShowDeny)
+        {
+            <MudTd DataLabel="Aktionen">
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                    @if (ShowApprove && OnApprove.HasDelegate)
+                    {
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.Check"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandleApprove(order))">
+                            Genehmigen
+                        </MudButton>
+                    }
+
+                    @if (ShowDeny && OnDeny.HasDelegate)
+                    {
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Close"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandleDeny(order))">
+                            Ablehnen
+                        </MudButton>
+                    }
+                </MudStack>
+            </MudTd>
+        }
+    </RowTemplate>
+
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Keine Bestellungen vorhanden.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter] public List<EquipmentOrder> Orders { get; set; } = new();
+    [Parameter] public bool ShowApprove { get; set; }
+    [Parameter] public bool ShowDeny { get; set; }
+    [Parameter] public bool ShowStartPreparing { get; set; }
+    [Parameter] public bool ShowFulfillmentActions { get; set; }
+    [Parameter] public bool ShowHandoverActions { get; set; }
+    [Parameter] public bool ShowReturnActions { get; set; }
+    [Parameter] public IReadOnlyDictionary<int, ReturnRequestStatus> OrderLineReturnStatuses { get; set; } = new Dictionary<int, ReturnRequestStatus>();
+    [Parameter] public bool ActionBusy { get; set; }
+    [Parameter] public EventCallback<EquipmentOrder> OnApprove { get; set; }
+    [Parameter] public EventCallback<EquipmentOrder> OnDeny { get; set; }
+    [Parameter] public EventCallback<EquipmentOrderLine> OnStartPreparing { get; set; }
+    [Parameter] public EventCallback<EquipmentOrderLine> OnAssignPosition { get; set; }
+    [Parameter] public EventCallback<EquipmentOrderLine> OnFulfillWithoutStorage { get; set; }
+    [Parameter] public EventCallback<EquipmentOrderLine> OnCompleteHandover { get; set; }
+    [Parameter] public EventCallback<EquipmentOrderLine> OnRequestReturn { get; set; }
+
+    private async Task HandleApprove(EquipmentOrder order)
+    {
+        if (OnApprove.HasDelegate)
+            await OnApprove.InvokeAsync(order);
+    }
+
+    private async Task HandleDeny(EquipmentOrder order)
+    {
+        if (OnDeny.HasDelegate)
+            await OnDeny.InvokeAsync(order);
+    }
+
+    private async Task HandleStartPreparing(EquipmentOrderLine line)
+    {
+        if (OnStartPreparing.HasDelegate)
+            await OnStartPreparing.InvokeAsync(line);
+    }
+
+    private async Task HandleAssignPosition(EquipmentOrderLine line)
+    {
+        if (OnAssignPosition.HasDelegate)
+            await OnAssignPosition.InvokeAsync(line);
+    }
+
+    private async Task HandleFulfillWithoutStorage(EquipmentOrderLine line)
+    {
+        if (OnFulfillWithoutStorage.HasDelegate)
+            await OnFulfillWithoutStorage.InvokeAsync(line);
+    }
+
+    private async Task HandleCompleteHandover(EquipmentOrderLine line)
+    {
+        if (OnCompleteHandover.HasDelegate)
+            await OnCompleteHandover.InvokeAsync(line);
+    }
+
+    private async Task HandleRequestReturn(EquipmentOrderLine line)
+    {
+        if (OnRequestReturn.HasDelegate)
+            await OnRequestReturn.InvokeAsync(line);
+    }
+
+    private static string OrderStatusLabel(OrderStatus status)
+    {
+        return status switch
+        {
+            OrderStatus.PendingApproval => "Ausstehend",
+            OrderStatus.Approved => "Genehmigt",
+            OrderStatus.Denied => "Abgelehnt",
+            OrderStatus.PartiallyFulfilled => "In Bearbeitung",
+            OrderStatus.Completed => "Abgeschlossen",
+            OrderStatus.Cancelled => "Abgebrochen",
+            _ => status.ToString()
+        };
+    }
+
+    private static Color OrderStatusColor(OrderStatus status)
+    {
+        return status switch
+        {
+            OrderStatus.PendingApproval => Color.Warning,
+            OrderStatus.Approved => Color.Success,
+            OrderStatus.Denied => Color.Error,
+            OrderStatus.PartiallyFulfilled => Color.Info,
+            OrderStatus.Completed => Color.Primary,
+            OrderStatus.Cancelled => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private static string LineStatusLabel(OrderLineStatus status)
+    {
+        return status switch
+        {
+            OrderLineStatus.WaitingForApproval => "Wartet auf Freigabe",
+            OrderLineStatus.Open => "Offen",
+            OrderLineStatus.Preparing => "In Vorbereitung",
+            OrderLineStatus.WaitingForExternalOrder => "Wartet auf externe Bestellung",
+            OrderLineStatus.ReadyForPickup => "Abholbereit",
+            OrderLineStatus.Fulfilled => "Erfüllt",
+            OrderLineStatus.Cancelled => "Abgebrochen",
+            OrderLineStatus.Returned => "Zurückgegeben",
+            _ => status.ToString()
+        };
+    }
+
+    private static string FulfillmentLabel(EffectiveFulfillmentMode mode)
+    {
+        return mode switch
+        {
+            EffectiveFulfillmentMode.UseStorage => "Lager später zuweisen",
+            EffectiveFulfillmentMode.ManualNoStorage => "Manuell ohne Lager",
+            EffectiveFulfillmentMode.ExternalOrder => "Externe Bestellung",
+            EffectiveFulfillmentMode.ServiceChange => "Service / Mutation",
+            EffectiveFulfillmentMode.ReturnAction => "Rückgabe / Kündigung",
+            _ => mode.ToString()
+        };
+    }
+
+    private static bool CanFulfillWithoutStorage(EquipmentOrderLine line)
+    {
+        return line.EffectiveFulfillmentMode is EffectiveFulfillmentMode.ManualNoStorage
+            or EffectiveFulfillmentMode.ExternalOrder
+            or EffectiveFulfillmentMode.ServiceChange
+            or EffectiveFulfillmentMode.ReturnAction;
+    }
+
+    private static bool CanCompleteHandover(EquipmentOrderLine line)
+    {
+        return line.EffectiveFulfillmentMode == EffectiveFulfillmentMode.UseStorage
+            && line.PositionId.HasValue;
+    }
+
+    private static bool CanRequestReturn(EquipmentOrderLine line)
+    {
+        return line.Status == OrderLineStatus.Fulfilled
+            && line.EffectiveFulfillmentMode == EffectiveFulfillmentMode.UseStorage
+            && line.PositionId.HasValue;
+    }
+
+    private static string ReturnStatusLabel(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.Pending => "Rückgabe angemeldet",
+            ReturnRequestStatus.ConfirmedReturned => "Zurückgegeben",
+            ReturnRequestStatus.Cancelled => "Abgebrochen",
+            _ => "Rückgabe"
+        };
+    }
+
+    private static Color ReturnStatusColor(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.ConfirmedReturned => Color.Success,
+            ReturnRequestStatus.Cancelled => Color.Error,
+            _ => Color.Warning
+        };
+    }
+
+    private static string Currency(EquipmentOrder order)
+    {
+        return order.Lines.FirstOrDefault()?.Currency ?? "CHF";
+    }
+
+    private static decimal OneTimeTotal(EquipmentOrder order)
+    {
+        return order.Lines
+            .Where(x => IsOneTime(x.BillingType))
+            .Sum(x => x.LinePrice);
+    }
+
+    private static decimal MonthlyTotal(EquipmentOrder order)
+    {
+        return order.Lines
+            .Where(x => IsMonthly(x.BillingType))
+            .Sum(x => x.LinePrice);
+    }
+
+    private static int NoCostLines(EquipmentOrder order)
+    {
+        return order.Lines.Count(x => IsNoCost(x.BillingType));
+    }
+
+    private static bool IsMonthly(string? billingType)
+        => (billingType ?? "").Contains("monat", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsOneTime(string? billingType)
+        => (billingType ?? "").Contains("einmal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNoCost(string? billingType)
+    {
+        var normalized = (billingType ?? "").Trim();
+        return string.IsNullOrWhiteSpace(normalized) ||
+               normalized.Equals("ohne", StringComparison.OrdinalIgnoreCase) ||
+               (!IsMonthly(normalized) && !IsOneTime(normalized));
+    }
+}

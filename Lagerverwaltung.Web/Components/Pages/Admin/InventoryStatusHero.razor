@@ -1,0 +1,226 @@
+@using System.Globalization
+@using System.Linq
+@using Microsoft.AspNetCore.Components
+@using System.Numerics
+@using MudBlazor
+
+@if (_isHidden)
+{
+    <button class="inventory-status-restore" type="button" @onclick="ShowVisual">
+        Status-Visual anzeigen
+    </button>
+}
+else
+{
+    <div class="inventory-status-visual inventory-status-visual--@DockClass" style="position: relative; z-index: 50; @VisualStyle">
+        <div class="inventory-status-visual__controls" aria-label="Status-Visual Optionen">
+            <button type="button" title="Position wechseln" aria-label="Status-Visual Position wechseln" @onclick="CycleDock">Pos</button>
+            <button class="inventory-status-visual__close" type="button" title="Ausblenden" aria-label="Status-Visual ausblenden" @onclick="HideVisual">X</button>
+        </div>
+
+        <div class="inventory-status-visual__copy">
+            <MudText Typo="Typo.overline" Class="inventory-status-visual__eyebrow">
+                Bestandsstatus
+            </MudText>
+
+            <MudText Typo="Typo.subtitle2" Class="inventory-status-visual__title">
+                Live-Kennzahlen für Verfügbarkeit und Mindestbestand
+            </MudText>
+
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="inventory-status-visual__chips">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Success">
+                    @AvailabilityText verfügbar
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">
+                    @NewAvailableItems neu
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                    @PendingReturns Rückgaben
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary">
+                    @CriticalCategories kritisch
+                </MudChip>
+            </MudStack>
+        </div>
+
+        <div class="inventory-status-visual__stage" role="img" aria-label="@AriaLabel" title="@CubeHelpText">
+            <div class="inventory-status-ring inventory-status-ring--outer"></div>
+            <div class="inventory-status-ring inventory-status-ring--inner"></div>
+            <div class="inventory-status-wave inventory-status-wave--one"></div>
+            <div class="inventory-status-wave inventory-status-wave--two"></div>
+
+            @foreach (var spark in _sparks)
+            {
+                <span class="inventory-status-spark" style="@spark.Style"></span>
+            }
+
+            <div class="inventory-status-cube-shell">
+                <div class="inventory-status-cube">
+                    <div class="inventory-status-cube__face inventory-status-cube__face--front">
+                        <span class="inventory-status-cube__value">@AvailableItems</span>
+                        <span class="inventory-status-cube__label">frei</span>
+                    </div>
+                    <div class="inventory-status-cube__face inventory-status-cube__face--back">
+                        <span class="inventory-status-cube__value">@TotalItems</span>
+                        <span class="inventory-status-cube__label">gesamt</span>
+                    </div>
+                    <div class="inventory-status-cube__face inventory-status-cube__face--right">
+                        <span class="inventory-status-cube__value">@NewAvailableItems</span>
+                        <span class="inventory-status-cube__label">neu</span>
+                    </div>
+                    <div class="inventory-status-cube__face inventory-status-cube__face--left">
+                        <span class="inventory-status-cube__value">@UsedAvailableItems</span>
+                        <span class="inventory-status-cube__label">gebraucht</span>
+                    </div>
+                    <div class="inventory-status-cube__face inventory-status-cube__face--top">
+                        <span class="inventory-status-cube__value">@CriticalCategories</span>
+                        <span class="inventory-status-cube__label">kritisch</span>
+                    </div>
+                    <div class="inventory-status-cube__face inventory-status-cube__face--bottom">
+                        <span class="inventory-status-cube__value">@PendingReturns</span>
+                        <span class="inventory-status-cube__label">Rückgaben</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const double TwoPi = Math.PI * 2.0;
+
+    [Parameter] public int TotalItems { get; set; }
+    [Parameter] public int AvailableItems { get; set; }
+    [Parameter] public int NewAvailableItems { get; set; }
+    [Parameter] public int UsedAvailableItems { get; set; }
+    [Parameter] public int CriticalCategories { get; set; }
+    [Parameter] public int PendingReturns { get; set; }
+
+    private Complex _inventoryPhase = Complex.One;
+    private Quaternion _statusRotation = Quaternion.Identity;
+    private double _availabilityRatio;
+    private double _attentionRatio;
+    private double _spinSeconds = 12;
+    private bool _isHidden;
+    private StatusVisualDock _dock = StatusVisualDock.Standard;
+    private IReadOnlyList<StatusSpark> _sparks = Array.Empty<StatusSpark>();
+
+    private string AvailabilityText => (_availabilityRatio * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
+    private string DockClass => _dock switch
+    {
+        StatusVisualDock.Lower => "lower",
+        StatusVisualDock.Compact => "compact",
+        _ => "standard"
+    };
+    private string CubeHelpText =>
+        $"Würfel: {AvailableItems} frei, {TotalItems} gesamt, {NewAvailableItems} neu, {UsedAvailableItems} gebraucht, {CriticalCategories} kritisch, {PendingReturns} Rückgaben.";
+    private string AriaLabel =>
+        $"Lagerstatus: {AvailableItems} von {TotalItems} Artikeln verfügbar, {CriticalCategories} kritische Kategorien, {PendingReturns} offene Rückgaben.";
+
+    private string VisualStyle => string.Format(
+        CultureInfo.InvariantCulture,
+        "--status-real:{0:0.###};--status-imag:{1:0.###};--glow-x:{2:0.###}%;--glow-y:{3:0.###}%;--glow-scale:{4:0.###};--spark-x:{5:0.###}px;--spark-y:{6:0.###}px;--prism-angle:{7:0.###}deg;--availability:{8:0.###};--attention:{9:0.###};--spin-speed:{10:0.###}s;--cube-x:{11:0.###}deg;--cube-y:{12:0.###}deg;--cube-z:{13:0.###}deg;",
+        _inventoryPhase.Real,
+        _inventoryPhase.Imaginary,
+        Clamp(64.0 + _inventoryPhase.Real * 9.0, 48.0, 84.0),
+        Clamp(38.0 + _inventoryPhase.Imaginary * 10.0, 18.0, 62.0),
+        0.88 + _availabilityRatio * 0.36,
+        _inventoryPhase.Real * 4.0,
+        _inventoryPhase.Imaginary * -4.0,
+        _inventoryPhase.Real * 80.0,
+        _availabilityRatio,
+        _attentionRatio,
+        _spinSeconds,
+        18.0 + _statusRotation.X * 42.0,
+        -32.0 + _statusRotation.Y * 58.0,
+        6.0 + _statusRotation.Z * 48.0);
+
+    protected override void OnParametersSet()
+    {
+        BuildVisualState();
+    }
+
+    private void CycleDock()
+    {
+        _dock = _dock switch
+        {
+            StatusVisualDock.Standard => StatusVisualDock.Lower,
+            StatusVisualDock.Lower => StatusVisualDock.Compact,
+            _ => StatusVisualDock.Standard
+        };
+    }
+
+    private void HideVisual() => _isHidden = true;
+
+    private void ShowVisual() => _isHidden = false;
+
+    private void BuildVisualState()
+    {
+        _availabilityRatio = TotalItems <= 0
+            ? 0
+            : Clamp01((double)AvailableItems / TotalItems);
+        _attentionRatio = Clamp01((CriticalCategories + PendingReturns * 0.35) / 10.0);
+
+        var phaseAngle = 0.35 + _availabilityRatio * TwoPi + PendingReturns * 0.11;
+        var amplitude = 1.0 + CriticalCategories * 0.08 + PendingReturns * 0.03;
+        _inventoryPhase = Complex.FromPolarCoordinates(amplitude, phaseAngle);
+
+        var axis = new Vector3(
+            0.35f + (float)_availabilityRatio,
+            0.65f + (float)Math.Min(NewAvailableItems, 25) / 25f,
+            0.45f + (float)Math.Min(UsedAvailableItems + PendingReturns, 25) / 25f);
+        axis = Vector3.Normalize(axis);
+
+        _statusRotation = Quaternion.Normalize(
+            Quaternion.CreateFromAxisAngle(axis, (float)(0.55 + phaseAngle / 4.0)));
+        _spinSeconds = Math.Max(8.5, 15.0 - _availabilityRatio * 4.0 + _attentionRatio * 2.0);
+        _sparks = Enumerable.Range(0, 18).Select(BuildSpark).ToArray();
+    }
+
+    private StatusSpark BuildSpark(int index)
+    {
+        var wave = _inventoryPhase * Complex.Exp(Complex.ImaginaryOne * (index * 0.71 + _inventoryPhase.Phase));
+        var orbit = new Vector3(
+            (float)Math.Cos(index * 0.53),
+            (float)Math.Sin(index * 0.77),
+            (float)Math.Cos(index * 0.31));
+        var rotated = Vector3.Transform(orbit, _statusRotation);
+
+        var left = Clamp(50.0 + rotated.X * 31.0 + wave.Real * 4.0, 7.0, 93.0);
+        var top = Clamp(50.0 + rotated.Y * 28.0 + wave.Imaginary * 4.0, 9.0, 91.0);
+        var size = 3.0 + (Math.Abs(wave.Magnitude) % 1.0) * 7.0 + Math.Abs(rotated.Z) * 3.0;
+        var delay = -index * 0.29;
+        var duration = 3.2 + (index % 7) * 0.43;
+        var opacity = Clamp(0.24 + Math.Abs(rotated.Z) * 0.54 + _availabilityRatio * 0.18, 0.25, 0.92);
+
+        return new StatusSpark(string.Format(
+            CultureInfo.InvariantCulture,
+            "left:{0:0.###}%;top:{1:0.###}%;width:{2:0.###}px;height:{2:0.###}px;animation-delay:{3:0.###}s;animation-duration:{4:0.###}s;opacity:{5:0.###};",
+            left,
+            top,
+            size,
+            delay,
+            duration,
+            opacity));
+    }
+
+    private static double Clamp01(double value) => Clamp(value, 0.0, 1.0);
+    private static double Clamp(double value, double min, double max)
+    {
+        if (value < min)
+            return min;
+        if (value > max)
+            return max;
+
+        return value;
+    }
+
+    private enum StatusVisualDock
+    {
+        Standard,
+        Lower,
+        Compact
+    }
+
+    private sealed record StatusSpark(string Style);
+}

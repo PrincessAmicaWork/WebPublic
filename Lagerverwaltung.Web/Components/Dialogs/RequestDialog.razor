@@ -1,0 +1,257 @@
+@using System.ComponentModel.DataAnnotations
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.AddShoppingCart" Class="mr-2" />
+            Legacy Einzelanfrage
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @if (Item is not null)
+        {
+            <MudPaper Class="pa-3 mb-4" Elevation="0" Style="background:#f5f5f5;border-radius:8px;">
+                <MudText Typo="Typo.subtitle2" Style="color:#005691;">@Item.CategoryName</MudText>
+                <MudText Typo="Typo.body1" Class="mt-1"><b>@Item.Description</b></MudText>
+                <MudText Typo="Typo.caption" Class="d-block mt-1">
+                    Verfügbar: @Item.AvailableCount von @Item.TotalCount
+                </MudText>
+                <MudText Typo="Typo.caption" Class="d-block mt-1">
+                    Neu: @Item.NewAvailableCount · Gebraucht: @Item.UsedAvailableCount
+                </MudText>
+            </MudPaper>
+        }
+
+
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            Diese Maske gehört zum alten Einzelanfrage-Flow. Für normale Bestellungen bitte den neuen Bestellflow verwenden.
+        </MudAlert>
+
+        @if (!_loadingSupervisors && !_supervisors.Any())
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3">
+                Es sind aktuell keine aktiven Vorgesetzten hinterlegt. Bitte IT/Admin kontaktieren.
+            </MudAlert>
+        }
+
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="Name"
+                          Label="Dein Name"
+                          Required="true"
+                          RequiredError="Name ist erforderlich!"
+                          Variant="Variant.Outlined"
+                          Class="mb-3" />
+
+            <MudTextField @bind-Value="Email"
+                          Label="Deine E-Mail"
+                          Required="true"
+                          RequiredError="E-Mail ist erforderlich!"
+                          Validation="@(new EmailAddressAttribute() { ErrorMessage = "Ungültige E-Mail" })"
+                          Variant="Variant.Outlined"
+                          Class="mb-3" />
+
+            <MudAutocomplete T="string"
+                             Label="Vorgesetzte/r"
+                             Value="_selectedSupervisorName"
+                             ValueChanged="OnSupervisorChanged"
+                             SearchFunc="SearchSupervisors"
+                             CoerceText="true"
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             Required="true"
+                             RequiredError="Vorgesetzte/r ist erforderlich!"
+                             Variant="Variant.Outlined"
+                             Class="mb-3"
+                             Disabled="_loadingSupervisors || !_supervisors.Any()"
+                             HelperText="@SupervisorHelperText" />
+
+
+            <MudTextField Value="_selectedSupervisorEmail"
+                          Label="E-Mail des Vorgesetzten"
+                          Variant="Variant.Outlined"
+                          ReadOnly="true"
+                          Class="mb-3"
+                          HelperText="Wird automatisch aus dem gewählten Vorgesetzten übernommen." />
+
+            <MudTextField @bind-Value="Reason"
+                          Label="Begründung"
+                          Required="true"
+                          RequiredError="Bitte gib einen Grund an!"
+                          Lines="3"
+                          Variant="Variant.Outlined"
+                          Class="mb-3" />
+
+            <MudPaper Class="pa-3 mb-1" Elevation="0" Style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+                @if (Item?.NewAvailableCount == 0 && Item?.UsedAvailableCount > 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mb-2">
+                        Für diesen Artikel ist aktuell nur Gebrauchtware verfügbar.
+                    </MudAlert>
+                }
+
+                <MudCheckBox T="bool"
+                             @bind-Value="UsedItemOk"
+                             Label="Gebrauchtgerät ist für diese Anfrage okay"
+                             Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Wenn IT einen passenden Rückläufer hat, darf statt Neuware ein gebrauchtes Gerät ausgegeben werden.
+                </MudText>
+            </MudPaper>
+        </MudForm>
+
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Abbrechen</MudButton>
+        <MudButton OnClick="Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="_submitting || _loadingSupervisors || !_supervisors.Any()"
+                   StartIcon="@Icons.Material.Filled.Send">
+            @(_submitting ? "Sende..." : "Legacy-Anfrage senden")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public CatalogItem? Item { get; set; }
+    [Inject] IEquipmentService EquipmentSvc { get; set; } = null!;
+    [Inject] IApproverService ApproverSvc { get; set; } = null!;
+    [Inject] ISnackbar Snackbar { get; set; } = null!;
+
+    private MudForm _form = null!;
+    private string Name = "";
+    private string Email = "";
+    private string Reason = "";
+    private bool UsedItemOk = false;
+
+    private string _selectedSupervisorName = "";
+    private string _selectedSupervisorEmail = "";
+
+
+    private List<ApproverOption> _supervisors = new();
+    private bool _loadingSupervisors = true;
+
+    private bool _submitting = false;
+    private string _errorMessage = "";
+
+    private string SupervisorHelperText => _loadingSupervisors
+        ? "Vorgesetztenliste wird geladen..."
+        : "Namen oder Email eintippen und passenden Vorgesetzten auswählen.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+
+            _supervisors = await ApproverSvc.GetActiveApproversAsync();
+
+            if (Item?.NewAvailableCount == 0 && Item?.UsedAvailableCount > 0)
+                UsedItemOk = true;
+        }
+        catch (Exception)
+        {
+            _errorMessage = "Die Vorgesetztenliste konnte nicht geladen werden.";
+            _supervisors = new();
+        }
+        finally
+        {
+            _loadingSupervisors = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private Task<IEnumerable<string>> SearchSupervisors(string? value, CancellationToken token)
+    {
+        IEnumerable<string> result;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            result = _supervisors
+                .Select(x => x.Name)
+                .OrderBy(x => x)
+                .Take(10);
+        }
+        else
+        {
+            var search = value.Trim();
+
+            result = _supervisors
+                .Where(x =>
+                    x.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    x.Email.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .Select(x => x.Name)
+                .OrderBy(x => x)
+                .Take(10);
+        }
+
+        return Task.FromResult(result);
+    }
+
+    private Task OnSupervisorChanged(string? value)
+    {
+        _selectedSupervisorName = value?.Trim() ?? "";
+
+        var match = _supervisors.FirstOrDefault(x =>
+            string.Equals(x.Name, _selectedSupervisorName, StringComparison.OrdinalIgnoreCase));
+
+
+        _selectedSupervisorEmail = match?.Email ?? "";
+
+        return Task.CompletedTask;
+    }
+
+    private async Task Submit()
+    {
+        await _form.ValidateAsync();
+
+        if (!_form.IsValid || Item is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_selectedSupervisorName) || string.IsNullOrWhiteSpace(_selectedSupervisorEmail))
+        {
+            _errorMessage = "Bitte einen gültigen Vorgesetzten aus der Liste auswählen.";
+            return;
+        }
+
+        _submitting = true;
+        _errorMessage = "";
+
+        try
+        {
+            var (ok, error) = await EquipmentSvc.SubmitRequestAsync(
+                Item.GroupKey,
+                Name,
+                Email,
+                _selectedSupervisorName,
+                _selectedSupervisorEmail,
+                Reason,
+                UsedItemOk);
+
+            if (ok)
+            {
+                Snackbar.Add("Anfrage gesendet!", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                _errorMessage = error;
+            }
+        }
+        catch (Exception)
+        {
+            _errorMessage = "Ein unerwarteter Fehler ist aufgetreten.";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

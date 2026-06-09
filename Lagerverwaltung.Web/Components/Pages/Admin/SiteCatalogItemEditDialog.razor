@@ -1,0 +1,165 @@
+﻿<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Tune" Class="mr-2" />
+            Standort-Konfiguration bearbeiten
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @if (Item?.CatalogItem is not null)
+        {
+            <MudPaper Class="pa-3 mb-4" Elevation="0" Style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+                <MudText Typo="Typo.caption">Katalogartikel</MudText>
+                <MudText Typo="Typo.body1"><b>@Item.CatalogItem.DisplayName</b></MudText>
+                <MudText Typo="Typo.caption" Class="d-block mt-1">
+                    Standard: @Item.CatalogItem.Currency @Item.CatalogItem.Price.ToString("0.00") · @Item.CatalogItem.BillingType
+                </MudText>
+            </MudPaper>
+        }
+
+        <MudForm @ref="_form">
+            <MudNumericField T="int"
+                             Label="Sortierung (aufsteigend)"
+                             Min="0"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             @bind-Value="_model.SortOrder"
+                             Class="mb-3" />
+
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+                <MudCheckBox T="bool"
+                             @bind-Value="_model.IsActive"
+                             Label="Für diesen Standort aktiv"
+                             Color="Color.Primary" />
+            </MudPaper>
+
+            <MudText Typo="Typo.caption" Class="d-block mb-2 mud-text-secondary">
+                Overrides überschreiben den globalen Katalogwert. Leer lassen = globaler Standard gilt.
+            </MudText>
+
+            <MudSelect T="CatalogFulfillmentMode?"
+                       Label="Fulfillment-Override (optional)"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Clearable="true"
+                       @bind-Value="_model.FulfillmentModeOverride"
+                       Class="mb-3">
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)null)">– global Standard –</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)CatalogFulfillmentMode.ConsumableNoStock)">Verbrauchsmaterial (kein Lager)</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)CatalogFulfillmentMode.StockManaged)">Lagerverwaltet</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)CatalogFulfillmentMode.StockOrExternalOrder)">Lager oder Externe Bestellung</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)CatalogFulfillmentMode.ExternalOrderOnly)">Nur Externe Bestellung</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)CatalogFulfillmentMode.ServiceChange)">Service-Wechsel</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode?" Value="@((CatalogFulfillmentMode?)CatalogFulfillmentMode.ReturnAction)">Rückgabe-Aktion</MudSelectItem>
+            </MudSelect>
+
+            <MudSelect T="int?"
+                       Label="Lager-Kategorie Override (optional)"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Clearable="true"
+                       @bind-Value="_model.StorageCategoryId"
+                       Class="mb-3">
+                <MudSelectItem T="int?" Value="@((int?)null)">– global Standard –</MudSelectItem>
+                @foreach (var cat in SiteCategories)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)cat.ID)">@cat.Name?.Trim()</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudGrid Spacing="2" Class="mb-3">
+                <MudItem xs="6">
+                    <MudNumericField T="decimal?"
+                                     Label="Preis Override (optional)"
+                                     Min="0"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     @bind-Value="_model.PriceOverride"
+                                     Clearable="true"
+                                     HelperText="Leer = global" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudTextField T="string"
+                                  Label="Abrechnung Override (optional)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  @bind-Value="_model.BillingTypeOverride"
+                                  HelperText="Leer = global" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public SiteCatalogItem? Item { get; set; }
+    [Parameter] public List<Category> SiteCategories { get; set; } = new();
+
+    private MudForm _form = null!;
+    private SiteCatalogItemFormModel _model = new();
+
+    protected override void OnInitialized()
+    {
+        if (Item is not null)
+        {
+            _model = new SiteCatalogItemFormModel
+            {
+                IsActive = Item.IsActive,
+                SortOrder = Item.SortOrder,
+                FulfillmentModeOverride = Item.FulfillmentModeOverride,
+                StorageCategoryId = Item.StorageCategoryId,
+                PriceOverride = Item.PriceOverride,
+                BillingTypeOverride = string.IsNullOrWhiteSpace(Item.BillingTypeOverride)
+                    ? ""
+                    : Item.BillingTypeOverride.Trim()
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        if (Item is null)
+            return;
+
+        var result = new SiteCatalogItem
+        {
+            Id = Item.Id,
+            SiteId = Item.SiteId,
+            CatalogItemId = Item.CatalogItemId,
+            IsActive = _model.IsActive,
+            SortOrder = _model.SortOrder,
+            FulfillmentModeOverride = _model.FulfillmentModeOverride,
+            StorageCategoryId = _model.StorageCategoryId,
+            PriceOverride = _model.PriceOverride,
+            BillingTypeOverride = string.IsNullOrWhiteSpace(_model.BillingTypeOverride)
+                ? " "
+                : _model.BillingTypeOverride.Trim()
+        };
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    private sealed class SiteCatalogItemFormModel
+    {
+        public bool IsActive { get; set; } = true;
+        public int SortOrder { get; set; }
+        public CatalogFulfillmentMode? FulfillmentModeOverride { get; set; }
+        public int? StorageCategoryId { get; set; }
+        public decimal? PriceOverride { get; set; }
+        public string BillingTypeOverride { get; set; } = "";
+    }
+}

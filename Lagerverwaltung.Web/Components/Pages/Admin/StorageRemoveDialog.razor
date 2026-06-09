@@ -1,0 +1,167 @@
+@using Lagerverwaltung.Web.Services
+@using MudBlazor
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@TitleIcon" Class="mr-2" />
+            @TitleText
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @if (Item is null)
+        {
+            <MudAlert Severity="Severity.Error">Artikel konnte nicht geladen werden.</MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="@AlertSeverity" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                @HelpText
+            </MudAlert>
+
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;">
+                <MudText Typo="Typo.caption">Positions-ID</MudText>
+                <MudText Typo="Typo.body1"><b>@Item.PositionId</b></MudText>
+
+                <MudText Typo="Typo.caption" Class="d-block mt-2">Artikel</MudText>
+                <MudText Typo="Typo.body2">@Item.CategoryName - @Item.Description</MudText>
+
+                <MudText Typo="Typo.caption" Class="d-block mt-2">Status</MudText>
+                <MudText Typo="Typo.body2">@Item.StatusText</MudText>
+            </MudPaper>
+
+            <MudForm @ref="_form">
+                <MudTextField T="string"
+                              Label="Grund / Kommentar"
+                              HelperText="Wird für Löschen/Vernichten gespeichert. Bei Force Delete dient es als nachvollziehbare Admin-Begründung."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Lines="3"
+                              Required="true"
+                              RequiredError="Bitte einen Grund eintragen."
+                              @bind-Value="_comment"
+                              Class="mb-3" />
+
+                @if (Action == StorageRemoveAction.ForceDelete)
+                {
+                    <MudTextField T="string"
+                                  Label="Positions-ID zur Bestätigung"
+                                  HelperText="Tippe exakt die Positions-ID ein. Das verhindert versehentliches endgültiges Löschen."
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Required="true"
+                                  RequiredError="Bitte die Positions-ID bestätigen."
+                                  Error="@_confirmationIdError"
+                                  ErrorText="@_confirmationIdErrorText"
+                                  @bind-Value="_confirmationIdText" />
+                }
+            </MudForm>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="@SubmitColor"
+                   Disabled="@(Item is null)"
+                   OnClick="Submit">
+            @SubmitText
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public StorageItemRow? Item { get; set; }
+    [Parameter] public StorageRemoveAction Action { get; set; }
+
+    private MudForm _form = null!;
+    private string _comment = "";
+    private string _confirmationIdText = "";
+    private bool _confirmationIdError;
+    private string _confirmationIdErrorText = "";
+
+    private string TitleText => Action switch
+    {
+        StorageRemoveAction.Destroy => "Artikel vernichten",
+        StorageRemoveAction.Delete => "Artikel löschen",
+        StorageRemoveAction.ForceDelete => "Force Delete für Testdaten",
+        _ => "Artikel entfernen"
+    };
+
+    private string SubmitText => Action switch
+    {
+        StorageRemoveAction.Destroy => "Vernichten",
+        StorageRemoveAction.Delete => "Löschen",
+        StorageRemoveAction.ForceDelete => "Endgültig löschen",
+        _ => "Ausführen"
+    };
+
+    private string TitleIcon => Action switch
+    {
+        StorageRemoveAction.Destroy => Icons.Material.Filled.DeleteSweep,
+        StorageRemoveAction.Delete => Icons.Material.Filled.Delete,
+        StorageRemoveAction.ForceDelete => Icons.Material.Filled.Warning,
+        _ => Icons.Material.Filled.MoreVert
+    };
+
+    private Color SubmitColor => Action switch
+    {
+        StorageRemoveAction.Destroy => Color.Warning,
+        StorageRemoveAction.Delete => Color.Error,
+        StorageRemoveAction.ForceDelete => Color.Error,
+        _ => Color.Primary
+    };
+
+    private Severity AlertSeverity => Action == StorageRemoveAction.ForceDelete
+        ? Severity.Error
+        : Severity.Warning;
+
+    private string HelpText => Action switch
+    {
+        StorageRemoveAction.Destroy => "Vernichten entfernt einen verfügbaren Artikel und schreibt einen Vernichtet-Eintrag mit Kommentar.",
+        StorageRemoveAction.Delete => "Löschen entfernt einen verfügbaren Artikel und schreibt einen Gelöscht-Eintrag mit Kommentar.",
+        StorageRemoveAction.ForceDelete => "Force Delete ist nur für Testdaten gedacht. Verknüpfte Anfragen, Ausgaben und Rückgaben werden ebenfalls entfernt.",
+        _ => "Bitte Aktion bestätigen."
+    };
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task Submit()
+    {
+        if (Item is null)
+            return;
+
+        _confirmationIdError = false;
+        _confirmationIdErrorText = "";
+
+        await _form.ValidateAsync();
+
+        if (!_form.IsValid)
+            return;
+
+        var confirmationId = Item.PositionId;
+
+        if (Action == StorageRemoveAction.ForceDelete)
+        {
+            if (!int.TryParse(_confirmationIdText?.Trim(), out confirmationId) || confirmationId != Item.PositionId)
+            {
+                _confirmationIdError = true;
+                _confirmationIdErrorText = $"Bitte exakt {Item.PositionId} eingeben.";
+                return;
+            }
+        }
+
+        var result = new StorageRemoveDialogResult(
+            Action,
+            _comment.Trim(),
+            confirmationId);
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+}

@@ -1,0 +1,160 @@
+@using Lagerverwaltung.Web.Models
+
+<MudTable Items="@Rows"
+          Hover="true"
+          Dense="true"
+          Breakpoint="Breakpoint.Md"
+          Elevation="0"
+          Class="issued-equipment-table">
+    <HeaderContent>
+        <MudTh>Ticket</MudTh>
+        <MudTh>Artikel</MudTh>
+        <MudTh>Lagerposition</MudTh>
+        <MudTh>Ausgegeben am</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Rückgabe</MudTh>
+    </HeaderContent>
+
+    <RowTemplate Context="row">
+        <MudTd DataLabel="Ticket">
+            <MudText Typo="Typo.body2" Style="font-family:monospace;font-weight:700;">
+                @row.Order.DisplayTicketNumber
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Artikel">
+            <MudText Typo="Typo.body2" Style="font-weight:700;">
+                @row.Line.DisplayName
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @row.Line.CategoryName · Menge @row.Line.Quantity
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Lagerposition">
+            <MudText Typo="Typo.body2">#@row.Line.PositionId</MudText>
+            @if (!string.IsNullOrWhiteSpace(row.Line.AdminComment) && row.Line.AdminComment != " ")
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@row.Line.AdminComment</MudText>
+            }
+        </MudTd>
+
+        <MudTd DataLabel="Ausgegeben am">
+            <MudText Typo="Typo.caption">
+                @(row.Line.FulfilledAt?.ToString("dd.MM.yyyy HH:mm") ?? "–")
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Color="@LineStatusColor(row.Line.Status)" Size="Size.Small">
+                @LineStatusLabel(row.Line.Status)
+            </MudChip>
+        </MudTd>
+
+        <MudTd DataLabel="Rückgabe">
+            @if (OrderLineReturnStatuses.TryGetValue(row.Line.Id, out var returnStatus))
+            {
+                <MudChip T="string" Color="@ReturnStatusColor(returnStatus)" Size="Size.Small">
+                    @ReturnStatusLabel(returnStatus)
+                </MudChip>
+            }
+            else if (row.Line.Status == OrderLineStatus.Fulfilled && OnRequestReturn.HasDelegate)
+            {
+                <MudButton Size="Size.Small"
+                           Variant="Variant.Filled"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.KeyboardReturn"
+                           Disabled="@ActionBusy"
+                           OnClick="@(() => HandleRequestReturn(row.Line))">
+                    Rückgabe anmelden
+                </MudButton>
+            }
+            else if (row.Line.Status == OrderLineStatus.Returned)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Bereits zurückgegeben</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">–</MudText>
+            }
+        </MudTd>
+    </RowTemplate>
+
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Keine ausgegebenen Geräte vorhanden.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter] public List<EquipmentOrder> Orders { get; set; } = new();
+    [Parameter] public IReadOnlyDictionary<int, ReturnRequestStatus> OrderLineReturnStatuses { get; set; } = new Dictionary<int, ReturnRequestStatus>();
+    [Parameter] public bool ActionBusy { get; set; }
+    [Parameter] public EventCallback<EquipmentOrderLine> OnRequestReturn { get; set; }
+
+    private List<IssuedEquipmentRow> Rows => Orders
+        .SelectMany(order => order.Lines
+            .Where(IsIssuedEquipmentLine)
+            .Select(line => new IssuedEquipmentRow(order, line)))
+        .OrderByDescending(row => row.Line.FulfilledAt ?? row.Order.CreatedAt)
+        .ThenByDescending(row => row.Line.Id)
+        .ToList();
+
+    private async Task HandleRequestReturn(EquipmentOrderLine line)
+    {
+        if (OnRequestReturn.HasDelegate)
+            await OnRequestReturn.InvokeAsync(line);
+    }
+
+    private static bool IsIssuedEquipmentLine(EquipmentOrderLine line)
+    {
+        return line.EffectiveFulfillmentMode == EffectiveFulfillmentMode.UseStorage
+            && line.Returnable
+            && line.PositionId.HasValue
+            && line.Status is OrderLineStatus.Fulfilled or OrderLineStatus.Returned;
+    }
+
+    private static string LineStatusLabel(OrderLineStatus status)
+    {
+        return status switch
+        {
+            OrderLineStatus.Fulfilled => "Ausgegeben",
+            OrderLineStatus.Returned => "Zurückgegeben",
+            _ => status.ToString()
+        };
+    }
+
+    private static Color LineStatusColor(OrderLineStatus status)
+    {
+        return status switch
+        {
+            OrderLineStatus.Fulfilled => Color.Success,
+            OrderLineStatus.Returned => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private static string ReturnStatusLabel(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.Pending => "Rückgabe angemeldet",
+            ReturnRequestStatus.ConfirmedReturned => "Zurückgegeben",
+            ReturnRequestStatus.Cancelled => "Abgebrochen",
+            _ => "Rückgabe"
+        };
+    }
+
+    private static Color ReturnStatusColor(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.ConfirmedReturned => Color.Success,
+            ReturnRequestStatus.Cancelled => Color.Error,
+            _ => Color.Warning
+        };
+    }
+
+    private sealed record IssuedEquipmentRow(EquipmentOrder Order, EquipmentOrderLine Line);
+}

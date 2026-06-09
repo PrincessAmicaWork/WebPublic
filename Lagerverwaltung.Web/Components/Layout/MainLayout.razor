@@ -1,0 +1,152 @@
+﻿@inherits LayoutComponentBase
+@inject ICurrentSiteService CurrentSiteService
+@inject NavigationManager Navigation
+
+<MudThemeProvider Theme="@_boschTheme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="page-shell">
+    <aside class="sidebar-shell">
+        <div class="bosch-brand-panel">
+            <img src="/assets/bosch_logo.png" alt="Bosch" class="bosch-logo" />
+        </div>
+
+        <NavMenu />
+    </aside>
+
+    <div class="main-shell">
+        <header class="top-header">
+            <div class="top-header__spacer"></div>
+
+            <div class="header-actions">
+
+                @if (_sitePickerReady && _sites.Count > 0)
+                {
+                    <MudSelect T="int"
+                               Value="_selectedSiteId"
+                               ValueChanged="ChangeSite"
+                               ToStringFunc="GetSiteName"
+                               Dense="true"
+                               Variant="Variant.Outlined"
+                               Class="site-picker"
+                               Disabled="_isChangingSite">
+
+                        @foreach (var site in _sites)
+                        {
+                            <MudSelectItem T="int" Value="@site.Id">
+                                @site.Name
+                            </MudSelectItem>
+                        }
+
+                    </MudSelect>
+                }
+
+                <div class="top-header__user">
+                    <MudIcon Icon="@Icons.Material.Filled.Person"
+                             Size="Size.Small" />
+                </div>
+            </div>
+        </header>
+
+        <main class="content-shell">
+            <article class="content-body">
+                <ErrorBoundary>
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent>
+                        <MudAlert Severity="Severity.Error" Class="my-4">
+                            <strong>Ein Fehler ist aufgetreten.</strong>
+                            <MudText>Bitte Seite neu laden oder IT kontaktieren.</MudText>
+                        </MudAlert>
+                    </ErrorContent>
+                </ErrorBoundary>
+            </article>
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui">
+    Ein unbehandelter Fehler ist aufgetreten.
+    <a href="" class="reload">Neu laden</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    private readonly MudTheme _boschTheme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#EA0016",
+            Secondary = "#005691",
+            Success = "#0A8F47",
+            Warning = "#F5A623",
+            Error = "#EA0016",
+            Info = "#2196F3",
+            Dark = "#243746",
+            Background = "#f3f4f6",
+            Surface = "#ffffff",
+            AppbarBackground = "#ffffff",
+            DrawerBackground = "#003b6f",
+            TextPrimary = "#2f3640",
+            TextSecondary = "#64748b"
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "8px"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = new[] { "Roboto", "Helvetica", "Arial", "sans-serif" }
+            }
+        }
+    };
+    private List<Site> _sites = [];
+    private int _selectedSiteId;
+    private bool _sitePickerReady;
+    private bool _isChangingSite;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sites = await CurrentSiteService.GetAvailableSitesAsync();
+
+        var currentSite = await CurrentSiteService.GetCurrentSiteAsync();
+
+        _selectedSiteId =
+            currentSite?.Id
+            ?? _sites.FirstOrDefault()?.Id
+            ?? 0;
+
+        _sitePickerReady = true;
+    }
+
+    private string GetSiteName(int siteId)
+    {
+        return _sites.FirstOrDefault(s => s.Id == siteId)?.Name ?? "";
+    }
+
+    private async Task ChangeSite(int siteId)
+    {
+        if (siteId <= 0)
+            return;
+
+        if (_isChangingSite)
+            return;
+
+        if (siteId == _selectedSiteId)
+            return;
+
+        _isChangingSite = true;
+        _selectedSiteId = siteId;
+
+        await CurrentSiteService.SetCurrentSiteAsync(siteId);
+
+        Navigation.NavigateTo(
+            Navigation.Uri,
+            forceLoad: true);
+    }
+}

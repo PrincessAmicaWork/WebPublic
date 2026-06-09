@@ -1,0 +1,30 @@
+<MudText Typo="Typo.h6" Class="admin-section-title">
+    @Title
+    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@Count</MudChip>
+</MudText>
+
+<MudPaper Class="admin-section-box" Elevation="0">
+    <div class="admin-section-box-header">
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            @if (Count == 0)
+            {
+                <span>Keine Einträge in diesem Bereich.</span>
+            }
+            else
+            {
+                <span>@Count Eintrag/Einträge</span>
+            }
+        </MudText>
+    </div>
+
+    @if (Count > 0)
+    {
+        @ChildContent
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public int Count { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,544 @@
+@page "/"
+@page "/order"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ICatalogService CatalogSvc
+@inject IRequestCatalogService AvailabilitySvc
+@inject IEquipmentOrderService OrderSvc
+@inject IApproverService ApproverSvc
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Neue Bestellung – Lagerverwaltung</PageTitle>
+
+<div>
+    <MudPaper Elevation="0"
+              Class="pa-6 mb-6 rounded-xl"
+              Style="background: radial-gradient(circle at 100% 0%, rgba(44, 179, 74, 0.17), transparent 30%), linear-gradient(135deg, rgba(0, 86, 145, 0.12), rgba(255, 255, 255, 0.96) 45%, rgba(245, 248, 251, 0.98)); border: 1px solid rgba(0, 86, 145, 0.15); box-shadow: 0 22px 46px rgba(0, 41, 77, 0.10);">
+        <MudGrid Spacing="4" AlignItems="AlignItems.Center">
+            <MudItem xs="12" md="8" Class="d-flex align-center gap-4">
+                <MudPaper Elevation="0"
+                          Class="d-flex align-center justify-center rounded-lg pa-3"
+                          Style="background: linear-gradient(135deg, #005691, #008ecf); color: white; min-width: 56px; height: 56px; box-shadow: 0 16px 26px rgba(0, 86, 145, 0.28);">
+                    <MudIcon Icon="@Icons.Material.Filled.AddShoppingCart" Size="Size.Large" />
+                </MudPaper>
+
+                <div>
+                    <MudText Typo="Typo.h4" Style="font-weight: 850; letter-spacing: -0.03em; color: #16202a;">Neue Bestellung</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary mt-1">
+                        Wähle die benötigten Artikel aus und sende sie gemeinsam in einem Ticket zur Freigabe.
+                    </MudText>
+                </div>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudPaper Class="pa-4 rounded-xl" Elevation="1">
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        </MudPaper>
+    }
+    else
+    {
+        @if (_catalog.Count == 0)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4 rounded-lg">
+                Für den aktuell gewählten Standort sind keine Katalogartikel verfügbar. Bitte wähle einen anderen Standort oder wende dich an den Administrator.
+            </MudAlert>
+        }
+
+        <MudGrid Spacing="4">
+            <MudItem xs="12" lg="7">
+
+                <MudPaper Class="pa-4 mb-5 rounded-xl"
+                          Style="border: 1px solid rgba(0, 86, 145, 0.10); background: rgba(255, 255, 255, 0.96); box-shadow: 0 18px 38px rgba(0, 41, 77, 0.08);"
+                          Elevation="0">
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="4">
+                            <MudSelect T="string" Label="Kategorie" Value="@_selectedCategory" ValueChanged="OnCategoryChanged" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                                <MudSelectItem T="string" Value="@string.Empty">Alle Kategorien</MudSelectItem>
+                                @foreach (var category in _categories)
+                                {
+                                    <MudSelectItem T="string" Value="@category">@category</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="8">
+                            <MudTextField T="string"
+                                          @bind-Value="_search"
+                                          Label="Suche"
+                                          Placeholder="Artikel, Hersteller, Kategorie ..."
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Immediate="true"
+                                          DebounceInterval="250"
+                                          OnDebounceIntervalElapsed="@(_ => { ApplyFilters(); return Task.CompletedTask; })"
+                                          Clearable="true"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@Icons.Material.Filled.Search" />
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+
+                @if (!_filteredCatalog.Any())
+                {
+                    <MudAlert Severity="Severity.Info" Class="rounded-lg">Keine Katalogartikel gefunden.</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="_filteredCatalog"
+                              Dense="true"
+                              Hover="true"
+                              Striped="true"
+                              Elevation="0"
+                              Class="rounded-xl overflow-hidden"
+                              Style="border: 1px solid rgba(0, 86, 145, 0.10); box-shadow: 0 18px 38px rgba(0, 41, 77, 0.08);">
+                        <HeaderContent>
+                            <MudTh>Kategorie</MudTh>
+                            <MudTh>Artikel</MudTh>
+                            <MudTh>Preis</MudTh>
+                            <MudTh>Verfügbarkeit</MudTh>
+                            <MudTh Style="text-align:center;">Aktion</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="item">
+                            <MudTd DataLabel="Kategorie"><MudText Typo="Typo.body2" Style="font-weight:600;color:#005691;">@item.CatalogItem!.CategoryName</MudText></MudTd>
+                            <MudTd DataLabel="Artikel">
+                                <MudText Typo="Typo.body2" Style="font-weight:600;">@item.CatalogItem!.ItemName</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@item.CatalogItem!.Manufacturer</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Preis">
+                                <MudText Typo="Typo.body2">@item.EffectiveCurrency @item.EffectivePrice.ToString("0.00")</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@item.EffectiveBillingType</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Verfügbarkeit">
+                                @{
+                                    var availability = GetAvailability(item);
+                                }
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@AvailabilityColor(availability)">@AvailabilityText(availability)</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Aktion" Style="text-align:center;">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanAddToCart(item))" StartIcon="@Icons.Material.Filled.AddShoppingCart" OnClick="@(() => AddToCart(item))">
+                                    Hinzufügen
+                                </MudButton>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudItem>
+
+            <MudItem xs="12" lg="5">
+                <div style="position: sticky; top: 1rem;">
+                    <MudPaper Class="pa-5 rounded-xl"
+                              Style="border: 1px solid rgba(0, 86, 145, 0.10); background: rgba(255, 255, 255, 0.96); box-shadow: 0 18px 38px rgba(0, 41, 77, 0.08);"
+                              Elevation="0">
+
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+                            <MudText Typo="Typo.h6" Style="font-weight:700;">Bestellung</MudText>
+                            <MudSpacer />
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">@_cart.Values.Sum(x => x.Quantity) Artikel</MudChip>
+                        </MudStack>
+
+                        @if (!_cart.Any())
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4 rounded-lg">Noch keine Artikel ausgewählt.</MudAlert>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="3" Class="mb-4">
+                                @foreach (var line in _cart.Values.OrderBy(x => x.Item.CatalogItem!.ActionCode).ThenBy(x => x.Item.CatalogItem!.ItemName).ToList())
+                                {
+                                    <MudPaper Class="pa-3 rounded-lg"
+                                              Style="border: 1px solid rgba(0, 86, 145, 0.10); background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);"
+                                              Elevation="0">
+
+                                        <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                                            <div style="min-width:0;flex:1;">
+                                                <MudText Typo="Typo.body2" Style="font-weight:700;">@line.Item.EffectiveDisplayName</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@line.Item.CatalogItem!.CategoryName · @line.Item.EffectiveCurrency @line.Item.EffectivePrice.ToString("0.00") · @line.Item.EffectiveBillingType</MudText>
+                                            </div>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveFromCart(line.Item.CatalogItemId))" />
+                                        </MudStack>
+
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-3">
+                                            <MudText Typo="Typo.caption">Menge</MudText>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" Disabled="line.Quantity <= 1" OnClick="@(() => ChangeQuantity(line, -1))" />
+                                            <MudText Typo="Typo.body2" Style="min-width:28px;text-align:center;font-weight:700;">@line.Quantity</MudText>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => ChangeQuantity(line, 1))" />
+                                        </MudStack>
+
+                                        @if (line.Item.EffectiveCatalogFulfillmentMode is CatalogFulfillmentMode.StockManaged or CatalogFulfillmentMode.StockOrExternalOrder)
+                                        {
+                                            <MudCheckBox T="bool" @bind-Value="line.UsedItemOk" Label="Gebrauchtgerät ist okay" Color="Color.Primary" Class="mt-1" />
+                                        }
+
+                                        <MudTextField T="string" @bind-Value="line.UserComment" Label="@CommentLabel(line.Item)" Placeholder="z.B. SN-Bxxxx, Mobile-Nr., Startdatum ..." Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mt-3 bg-white" />
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        }
+
+                        <MudDivider Class="my-5" />
+
+                        <MudForm @ref="_form">
+                            <MudCheckBox T="bool" @bind-Value="_orderForSomeoneElse" Label="Ich bestelle für jemand anderes" Color="Color.Primary" Class="mb-3" />
+
+                            @if (_orderForSomeoneElse)
+                            {
+                                <MudTextField @bind-Value="_requestedForName" Label="Empfänger/in Name" Required="true" RequiredError="Name ist erforderlich!" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                                <MudTextField @bind-Value="_requestedForEmail" Label="Empfänger/in E-Mail (optional bei New Hire)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4 rounded-lg">
+                                    Bestellung für dich selbst: <strong>@DisplayCurrentUserName</strong> (@DisplayCurrentUserEmail)
+                                </MudAlert>
+                            }
+
+                            <MudTextField @bind-Value="_pickupContactName" Label="Abholkontakt Name" Required="true" RequiredError="Abholkontakt ist erforderlich!" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                            <MudTextField @bind-Value="_pickupContactEmail" Label="Abholkontakt E-Mail" Required="true" RequiredError="E-Mail ist erforderlich!" Validation="@(new EmailAddressAttribute() { ErrorMessage = "Ungültige E-Mail" })" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+                            <MudAutocomplete T="string"
+                                             Label="Vorgesetzte/r"
+                                             Value="_selectedSupervisorName"
+                                             ValueChanged="OnSupervisorChanged"
+                                             SearchFunc="SearchSupervisors"
+                                             CoerceText="true"
+                                             Clearable="true"
+                                             ResetValueOnEmptyText="true"
+                                             Required="true"
+                                             RequiredError="Vorgesetzte/r ist erforderlich!"
+                                             Variant="Variant.Outlined"
+                                             Margin="Margin.Dense"
+                                             Class="mb-3"
+                                             Disabled="_loadingSupervisors || !_supervisors.Any()"
+                                             HelperText="Namen oder Email eintippen und passenden Vorgesetzten auswählen." />
+
+                            <MudTextField Value="@_selectedSupervisorEmail" Label="E-Mail des Vorgesetzten" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="true" Class="mb-3" />
+                            <MudTextField @bind-Value="_reason" Label="Begründung" Required="true" RequiredError="Bitte gib einen Grund an!" Lines="3" Variant="Variant.Outlined" Class="mb-4" />
+                        </MudForm>
+
+                        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mb-4 rounded-lg">@_errorMessage</MudAlert>
+                        }
+
+                        <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Filled" Color="Color.Primary" Disabled="_submitting || !_cart.Any() || _loadingSupervisors || !_supervisors.Any()" StartIcon="@Icons.Material.Filled.Send" OnClick="SubmitOrderAsync">
+                            @(_submitting ? "Sende..." : "Bestellung absenden")
+                        </MudButton>
+                    </MudPaper>
+                </div>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    private MudForm _form = null!;
+    private bool _loading = true;
+    private bool _loadingSupervisors = true;
+    private bool _submitting;
+
+    private List<SiteCatalogItem> _catalog = new();
+    private List<SiteCatalogItem> _filteredCatalog = new();
+    private Dictionary<int, CatalogItemAvailability> _availability = new();
+    private List<string> _categories = new();
+    private Dictionary<int, CartLine> _cart = new();
+    private List<ApproverOption> _supervisors = new();
+
+    private string _selectedCategory = "";
+    private string _search = "";
+    private string _selectedSupervisorName = "";
+    private string _selectedSupervisorEmail = "";
+    private string _reason = "";
+    private string _errorMessage = "";
+    private bool _orderForSomeoneElse;
+    private string _requestedForName = "";
+    private string _requestedForEmail = "";
+    private string _pickupContactName = "";
+    private string _pickupContactEmail = "";
+
+    private string _currentUserName = "";
+    private string _currentUserEmail = "";
+
+    private string DisplayCurrentUserName => string.IsNullOrWhiteSpace(_currentUserName) ? "angemeldeter Benutzer" : _currentUserName;
+    private string DisplayCurrentUserEmail => string.IsNullOrWhiteSpace(_currentUserEmail) ? "E-Mail wird geladen" : _currentUserEmail;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUserAsync();
+
+        _pickupContactName = _currentUserName;
+        _pickupContactEmail = _currentUserEmail;
+
+        try
+        {
+            _catalog = await CatalogSvc.GetActiveItemsAsync();
+            _availability = await AvailabilitySvc.GetAvailabilityByItemIdAsync(_catalog.Select(x => x.CatalogItemId));
+            _categories = _catalog
+                .Select(x => x.CatalogItem?.CategoryName ?? "")
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x)
+                .ToList();
+            ApplyFilters();
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        try
+        {
+            _supervisors = await ApproverSvc.GetActiveApproversAsync();
+        }
+        finally
+        {
+            _loadingSupervisors = false;
+        }
+    }
+
+    private async Task LoadCurrentUserAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        _currentUserEmail =
+            user.FindFirst("preferred_username")?.Value
+            ?? user.FindFirst("email")?.Value
+            ?? user.FindFirst(ClaimTypes.Email)?.Value
+            ?? user.FindFirst("upn")?.Value
+            ?? user.Identity?.Name
+            ?? "";
+
+        _currentUserEmail = _currentUserEmail.Trim();
+
+        _currentUserName =
+            user.FindFirst("name")?.Value
+            ?? user.FindFirst(ClaimTypes.Name)?.Value
+            ?? user.Identity?.Name
+            ?? _currentUserEmail;
+
+        _currentUserName = _currentUserName.Trim();
+
+        if (string.IsNullOrWhiteSpace(_currentUserName))
+            _currentUserName = _currentUserEmail;
+    }
+
+    private Task OnCategoryChanged(string? value)
+    {
+        _selectedCategory = value ?? "";
+        ApplyFilters();
+        return Task.CompletedTask;
+    }
+
+    private void ApplyFilters()
+    {
+        var query = _catalog.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(_selectedCategory))
+            query = query.Where(x => string.Equals(x.CatalogItem?.CategoryName, _selectedCategory, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var search = _search.Trim();
+            query = query.Where(x =>
+                (x.CatalogItem?.ActionCode ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (x.CatalogItem?.CategoryName ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (x.CatalogItem?.Manufacturer ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (x.CatalogItem?.ItemName ?? "").Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _filteredCatalog = query
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.CatalogItem?.CategoryName)
+            .ThenBy(x => x.CatalogItem?.ActionCode)
+            .ThenBy(x => x.CatalogItem?.ItemName)
+            .ToList();
+    }
+
+    private void AddToCart(SiteCatalogItem item)
+    {
+        if (!CanAddToCart(item))
+        {
+            Snackbar.Add($"{item.EffectiveDisplayName} ist aktuell nicht verfügbar.", Severity.Warning);
+            return;
+        }
+
+        if (_cart.TryGetValue(item.CatalogItemId, out var existing))
+        {
+            existing.Quantity = Math.Min(99, existing.Quantity + 1);
+            return;
+        }
+
+        _cart[item.CatalogItemId] = new CartLine { Item = item, Quantity = 1 };
+    }
+
+    private void RemoveFromCart(int catalogItemId)
+    {
+        _cart.Remove(catalogItemId);
+    }
+
+    private static void ChangeQuantity(CartLine line, int delta)
+    {
+        line.Quantity = Math.Clamp(line.Quantity + delta, 1, 99);
+    }
+
+    private Task<IEnumerable<string>> SearchSupervisors(string? value, CancellationToken token)
+    {
+        IEnumerable<string> result;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            result = _supervisors.Select(x => x.Name).OrderBy(x => x).Take(10);
+        }
+        else
+        {
+            var search = value.Trim();
+            result = _supervisors
+                .Where(x => x.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || x.Email.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .Select(x => x.Name)
+                .OrderBy(x => x)
+                .Take(10);
+        }
+
+        return Task.FromResult(result);
+    }
+
+    private Task OnSupervisorChanged(string? value)
+    {
+        _selectedSupervisorName = value?.Trim() ?? "";
+        var match = _supervisors.FirstOrDefault(x => string.Equals(x.Name, _selectedSupervisorName, StringComparison.OrdinalIgnoreCase));
+        _selectedSupervisorEmail = match?.Email ?? "";
+        return Task.CompletedTask;
+    }
+
+    private async Task SubmitOrderAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        if (!_cart.Any())
+        {
+            _errorMessage = "Bitte mindestens einen Artikel auswählen.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedSupervisorEmail))
+        {
+            _errorMessage = "Bitte einen gültigen Vorgesetzten aus der Liste auswählen.";
+            return;
+        }
+
+        _availability = await AvailabilitySvc.GetAvailabilityByItemIdAsync(_catalog.Select(x => x.CatalogItemId));
+        var unavailableLine = _cart.Values.FirstOrDefault(x => !CanAddToCart(x.Item));
+        if (unavailableLine is not null)
+        {
+            _errorMessage = $"{unavailableLine.Item.EffectiveDisplayName} ist aktuell nicht verfügbar.";
+            return;
+        }
+
+        var missingComment = _cart.Values.FirstOrDefault(x => (x.Item.CatalogItem?.RequiresComment ?? false) && string.IsNullOrWhiteSpace(x.UserComment));
+        if (missingComment is not null)
+        {
+            _errorMessage = $"Bitte eine Notiz für '{missingComment.Item.EffectiveDisplayName}' erfassen.";
+            return;
+        }
+
+        _submitting = true;
+        _errorMessage = "";
+
+        try
+        {
+            if (!_orderForSomeoneElse && string.IsNullOrWhiteSpace(_currentUserEmail))
+            {
+                _errorMessage = "Deine E-Mail-Adresse konnte nicht aus dem Login gelesen werden. Bitte lade die Seite neu oder melde dich erneut an.";
+                return;
+            }
+
+            var requestedForName = _orderForSomeoneElse ? _requestedForName : _currentUserName;
+            var requestedForEmail = _orderForSomeoneElse ? _requestedForEmail : _currentUserEmail;
+
+            var result = await OrderSvc.SubmitOrderAsync(new SubmitEquipmentOrderRequest(
+                RequestedForName: requestedForName,
+                RequestedForEmail: requestedForEmail,
+                PickupContactName: _pickupContactName,
+                PickupContactEmail: _pickupContactEmail,
+                SupervisorName: _selectedSupervisorName,
+                SupervisorEmail: _selectedSupervisorEmail,
+                Reason: _reason,
+                Lines: _cart.Values.Select(x => new SubmitEquipmentOrderLineRequest(x.Item.CatalogItemId, x.Quantity, x.UsedItemOk, x.UserComment)).ToList()));
+
+            if (!result.Ok)
+            {
+                _errorMessage = result.Error;
+                return;
+            }
+
+            Snackbar.Add($"Bestellung {result.TicketNumber} wurde gesendet.", Severity.Success);
+
+            if (!string.IsNullOrWhiteSpace(result.Warning))
+                Snackbar.Add(result.Warning, Severity.Warning);
+
+            _cart.Clear();
+            _reason = "";
+            _selectedSupervisorName = "";
+            _selectedSupervisorEmail = "";
+            _requestedForName = "";
+            _requestedForEmail = "";
+            _orderForSomeoneElse = false;
+        }
+        catch (Exception)
+        {
+            _errorMessage = "Ein unerwarteter Fehler ist aufgetreten.";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+
+    private CatalogItemAvailability GetAvailability(SiteCatalogItem item)
+    {
+        return _availability.TryGetValue(item.CatalogItemId, out var availability)
+            ? availability
+            : CatalogItemAvailability.NoStorage(item.CatalogItemId);
+    }
+
+    private bool CanAddToCart(SiteCatalogItem item)
+    {
+        var availability = GetAvailability(item);
+        return availability.IsAvailable;
+    }
+
+    private static string AvailabilityText(CatalogItemAvailability availability)
+    {
+        return availability.IsAvailable
+            ? "Verfügbar"
+            : "Nicht verfügbar";
+    }
+
+    private static Color AvailabilityColor(CatalogItemAvailability availability)
+    {
+        return availability.IsAvailable
+            ? Color.Success
+            : Color.Error;
+    }
+
+    private static string CommentLabel(SiteCatalogItem item)
+    {
+        return (item.CatalogItem?.RequiresComment ?? false)
+            ? "Notiz zu diesem Artikel (erforderlich)"
+            : "Notiz zu diesem Artikel";
+    }
+
+    private sealed class CartLine
+    {
+        public SiteCatalogItem Item { get; set; } = null!;
+        public int Quantity { get; set; } = 1;
+        public bool UsedItemOk { get; set; }
+        public string UserComment { get; set; } = "";
+    }
+}

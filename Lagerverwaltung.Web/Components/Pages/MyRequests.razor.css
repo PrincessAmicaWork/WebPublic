@@ -1,0 +1,278 @@
+﻿.my-requests-page {
+    max-width: 100%;
+}
+
+.page-title {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.25rem;
+}
+
+.page-subtitle {
+    color: #5f6b7a;
+    margin-bottom: 1.35rem;
+}
+
+.request-search-card {
+    padding: 1rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.request-search-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 1rem;
+    align-items: center;
+}
+
+.request-search-field {
+    min-width: 0;
+}
+
+.request-search-button {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+    .request-search-button ::deep .mud-button-root {
+        height: 56px;
+        border-radius: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+.requests-result-card {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 86, 145, 0.10);
+    background: rgba(255, 255, 255, 0.96);
+}
+
+.requests-result-card--shine {
+    box-shadow: 0 18px 42px rgba(0, 41, 77, 0.08);
+}
+
+.results-caption {
+    color: #5f6b7a;
+    margin-bottom: 0.75rem;
+}
+
+.mono-text {
+    font-family: monospace;
+    color: #8a8f98;
+}
+
+.category-text {
+    color: #005691;
+    font-weight: 600;
+}
+
+.comment-text {
+    color: #666;
+}
+
+.my-requests-overview {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    /* Keeps text on the left column, pushes stats to the right column */
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.25rem;
+    /* FIX: Prevents the text block from stretching vertically to match the stat boxes height */
+    align-items: flex-start;
+    /* FIX: Increased padding to 1.5rem to give the icon and edges comfortable breathing room */
+    padding: 1.5rem;
+    margin: 0.25rem 0 1.45rem;
+    border-radius: 20px;
+    border: 1px solid rgba(0, 86, 145, 0.16);
+    background: radial-gradient(circle at 96% 18%, rgba(44, 179, 74, 0.16), transparent 28%), linear-gradient(135deg, rgba(0, 86, 145, 0.10), rgba(255, 255, 255, 0.95) 42%, rgba(245, 248, 251, 0.98));
+    box-shadow: 0 20px 45px rgba(0, 41, 77, 0.10);
+}
+
+    .my-requests-overview::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(120deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0) 42%);
+    }
+
+.my-requests-overview-main,
+.overview-stats {
+    position: relative;
+    z-index: 1;
+}
+
+.my-requests-overview-main {
+    display: flex;
+    /* FIX: Centers the icon wrapper perfectly on a baseline alongside the text block */
+    align-items: center;
+    /* FIX: Generous space between the icon wrapper and the text pillar */
+    gap: 1.25rem;
+    min-width: 0;
+}
+
+.overview-icon-wrap {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    color: white;
+    background: linear-gradient(135deg, #005691, #008ecf);
+    box-shadow: 0 14px 24px rgba(0, 86, 145, 0.26);
+    /* FIX: Small extra cushion ensuring it never crowds the left perimeter border */
+    margin-left: 0.25rem;
+}
+
+.overview-kicker {
+    display: block;
+    color: #005691;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin-bottom: 0.1rem;
+}
+
+.overview-title {
+    font-weight: 800;
+    color: #16202a;
+    margin: 0;
+}
+
+.overview-subtitle {
+    color: #5f6b7a;
+    margin: 0.12rem 0 0;
+}
+
+.overview-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    height: 100%;
+}
+
+.overview-stat {
+    min-width: 92px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0.75rem 0.9rem;
+    border-radius: 16px;
+    border: 1px solid rgba(0, 86, 145, 0.12);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.82), 0 10px 18px rgba(0, 41, 77, 0.06);
+    backdrop-filter: blur(8px);
+}
+
+    .overview-stat strong {
+        font-size: 1.42rem;
+        line-height: 1;
+        color: #16202a;
+    }
+
+    .overview-stat span {
+        margin-top: 0.28rem;
+        font-size: 0.74rem;
+        font-weight: 800;
+        color: #667085;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+
+.overview-stat--orders {
+    border-left: 4px solid #ffb300;
+}
+
+.overview-stat--equipment {
+    border-left: 4px solid #2cb34a;
+}
+
+.overview-stat--returns {
+    border-left: 4px solid #008ecf;
+}
+
+.overview-stat--legacy {
+    border-left: 4px solid #8a8f98;
+}
+
+.section-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 1.3rem 0 0.65rem;
+    padding-left: 0.85rem;
+    border-left: 5px solid #005691;
+}
+
+.section-heading--muted {
+    border-left-color: #7a8a9a;
+}
+
+.section-heading--legacy {
+    border-left-color: #8a8f98;
+}
+
+.section-title {
+    font-weight: 800;
+    color: #16202a;
+    margin: 0;
+}
+
+.section-subtitle {
+    display: block;
+    color: #6b7280;
+    margin-top: 0.12rem;
+}
+
+@media (max-width: 960px) {
+    .request-search-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .request-search-button ::deep .mud-button-root {
+        height: 48px;
+    }
+
+    .my-requests-overview {
+        grid-template-columns: 1fr;
+        /* Reverts back to baseline on responsive tablet stack layouts */
+        align-items: flex-start;
+    }
+
+    .overview-stats {
+        justify-content: flex-start;
+        margin-top: 0.5rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .my-requests-overview {
+        padding: 1.25rem;
+        border-radius: 16px;
+    }
+
+    .my-requests-overview-main {
+        /* FIX: Keeps icon horizontally centered with title block when viewed on mobile screens */
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .overview-icon-wrap {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        margin-left: 0;
+    }
+
+    .overview-stat {
+        min-width: calc(50% - 0.35rem);
+    }
+}

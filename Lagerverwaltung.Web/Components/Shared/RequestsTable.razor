@@ -1,0 +1,245 @@
+@using Lagerverwaltung.Web.Models
+
+<MudTable Items="@Requests"
+          Hover="true"
+          Dense="true"
+          Breakpoint="Breakpoint.Sm"
+          Elevation="0">
+
+    <HeaderContent>
+        <MudTh>Ticket</MudTh>
+        <MudTh>Datum</MudTh>
+        <MudTh>Anfragender</MudTh>
+        <MudTh>Vorgesetzter</MudTh>
+        <MudTh>Equipment</MudTh>
+        <MudTh>Begründung</MudTh>
+        <MudTh>Gebraucht OK</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Kommentar</MudTh>
+
+        @if (ShowApprove || ShowDeny || ShowPreparing || ShowCollected)
+        {
+            <MudTh>Aktionen</MudTh>
+        }
+    </HeaderContent>
+
+    <RowTemplate Context="req">
+        <MudTd DataLabel="Ticket">
+            <MudText Typo="Typo.body2" Style="font-family:monospace;font-weight:700;">
+                @req.DisplayTicketNumber
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Datum">
+            @req.RequestDate.ToString("dd.MM.yyyy HH:mm")
+        </MudTd>
+
+        <MudTd DataLabel="Anfragender">
+            <MudText Typo="Typo.body2">@req.RequesterName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@req.RequesterEmail</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Vorgesetzter">
+            <MudText Typo="Typo.body2">@req.SupervisorName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@req.SupervisorEmail</MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Equipment">
+            <MudText Typo="Typo.body2">
+                @req.Position?.Category?.Name
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @req.Position?.Description?.Trim()
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @req.Position?.OrderNumber?.Trim()
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                Zustand: @(req.Position?.StockConditionLabel ?? "Neu")
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Begründung">
+            @req.Reason
+        </MudTd>
+
+        <MudTd DataLabel="Gebraucht OK">
+            <MudText Typo="Typo.caption" Style="font-weight:700;">
+                @(req.UsedItemOk ? "Ja" : "Nein")
+            </MudText>
+        </MudTd>
+
+        <MudTd DataLabel="Status">
+            <StatusChip Status="@req.Status" />
+            @if (req.FulfillmentType.HasValue)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                    @FulfillmentLabel(req.FulfillmentType.Value)
+                </MudText>
+            }
+        </MudTd>
+
+        <MudTd DataLabel="Kommentar">
+            @if (!string.IsNullOrWhiteSpace(req.BossComment) && req.BossComment != " ")
+            {
+                @req.BossComment
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+            }
+        </MudTd>
+
+        @if (ShowApprove || ShowDeny || ShowPreparing || ShowCollected)
+        {
+            <MudTd DataLabel="Aktionen">
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+
+                    @if (ShowApprove && OnApprove.HasDelegate)
+                    {
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.Check"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandleApprove(req))">
+                            Genehmigen
+                        </MudButton>
+                    }
+
+                    @if (ShowDeny && OnDeny.HasDelegate)
+                    {
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Close"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandleDeny(req))">
+                            Ablehnen
+                        </MudButton>
+                    }
+
+                    @if (ShowPreparing && OnPreparing.HasDelegate)
+                    {
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   StartIcon="@Icons.Material.Filled.Build"
+                                   Disabled="@ActionBusy"
+                                   OnClick="@(() => HandlePreparing(req))">
+                            Vorbereiten
+                        </MudButton>
+                    }
+
+                    @if (ShowCollected)
+                    {
+                        @if (OnCollectedUsed.HasDelegate)
+                        {
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Secondary"
+                                       StartIcon="@Icons.Material.Filled.Autorenew"
+                                       Disabled="@(ActionBusy || !req.UsedItemOk || req.Position?.StockCondition != StockCondition.Used)"
+                                       OnClick="@(() => HandleCollectedUsed(req))">
+                                Gebraucht
+                            </MudButton>
+                        }
+
+                        @if (OnCollectedNew.HasDelegate)
+                        {
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.AddBox"
+                                       Disabled="@(ActionBusy || req.Position?.StockCondition != StockCondition.New)"
+                                       OnClick="@(() => HandleCollectedNew(req))">
+                                Neu
+                            </MudButton>
+                        }
+
+                        @if (OnCollected.HasDelegate && !OnCollectedUsed.HasDelegate && !OnCollectedNew.HasDelegate)
+                        {
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Send"
+                                       Disabled="@ActionBusy"
+                                       OnClick="@(() => HandleCollected(req))">
+                                Abholen
+                            </MudButton>
+                        }
+                    }
+
+                </MudStack>
+            </MudTd>
+        }
+    </RowTemplate>
+
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Keine Anfragen vorhanden.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter] public List<EquipmentRequest> Requests { get; set; } = new();
+
+    [Parameter] public bool ShowApprove { get; set; }
+    [Parameter] public bool ShowDeny { get; set; }
+    [Parameter] public bool ShowPreparing { get; set; }
+    [Parameter] public bool ShowCollected { get; set; }
+
+
+    [Parameter] public bool ActionBusy { get; set; }
+
+    [Parameter] public EventCallback<EquipmentRequest> OnApprove { get; set; }
+    [Parameter] public EventCallback<EquipmentRequest> OnDeny { get; set; }
+    [Parameter] public EventCallback<EquipmentRequest> OnPreparing { get; set; }
+    [Parameter] public EventCallback<EquipmentRequest> OnCollected { get; set; }
+    [Parameter] public EventCallback<EquipmentRequest> OnCollectedNew { get; set; }
+    [Parameter] public EventCallback<EquipmentRequest> OnCollectedUsed { get; set; }
+
+    private static string FulfillmentLabel(RequestFulfillmentType fulfillmentType)
+    {
+        return fulfillmentType == RequestFulfillmentType.NewFromStock
+            ? "Herausgabe: Neu"
+            : "Herausgabe: Gebraucht";
+    }
+
+    private async Task HandleApprove(EquipmentRequest req)
+    {
+        if (OnApprove.HasDelegate)
+            await OnApprove.InvokeAsync(req);
+    }
+
+    private async Task HandleDeny(EquipmentRequest req)
+    {
+        if (OnDeny.HasDelegate)
+            await OnDeny.InvokeAsync(req);
+    }
+
+    private async Task HandlePreparing(EquipmentRequest req)
+    {
+        if (OnPreparing.HasDelegate)
+            await OnPreparing.InvokeAsync(req);
+    }
+
+    private async Task HandleCollected(EquipmentRequest req)
+    {
+        if (OnCollected.HasDelegate)
+            await OnCollected.InvokeAsync(req);
+    }
+
+    private async Task HandleCollectedNew(EquipmentRequest req)
+    {
+        if (OnCollectedNew.HasDelegate)
+            await OnCollectedNew.InvokeAsync(req);
+    }
+
+    private async Task HandleCollectedUsed(EquipmentRequest req)
+    {
+        if (OnCollectedUsed.HasDelegate)
+            await OnCollectedUsed.InvokeAsync(req);
+    }
+}

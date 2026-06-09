@@ -1,0 +1,33 @@
+﻿@page "/sn"
+@page "/ni"
+@page "/fra"
+@attribute [Authorize]
+@inject ICurrentSiteService CurrentSiteService
+@inject NavigationManager Navigation
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Derive the site code from the last segment of the current URL path.
+        var path = new Uri(Navigation.Uri).AbsolutePath.TrimStart('/').Trim();
+
+        var sites = await CurrentSiteService.GetAvailableSitesAsync();
+        var site = sites.FirstOrDefault(s =>
+            string.Equals(s.Code.Trim(), path, StringComparison.OrdinalIgnoreCase));
+
+        if (site is not null)
+        {
+            try
+            {
+                await CurrentSiteService.SetCurrentSiteAsync(site.Id);
+            }
+            catch (InvalidOperationException)
+            {
+                // The site is inactive or the user is not allowed to access it.
+                // Proceed to the order page without changing the current selection.
+            }
+        }
+
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

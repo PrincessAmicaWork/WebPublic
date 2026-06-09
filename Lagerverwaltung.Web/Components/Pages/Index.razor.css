@@ -1,0 +1,28 @@
+.catalog-filters {
+    border-radius: 12px;
+}
+
+.filter-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.catalog-filters :deep(.mud-input-control) {
+    margin-top: 0;
+}
+
+.catalog-filters :deep(.mud-select),
+.catalog-filters :deep(.mud-input),
+.catalog-filters :deep(.mud-input-root) {
+    width: 100%;
+}
+
+.catalog-filters :deep(.mud-input-slot) {
+    background-color: white;
+}
+
+.catalog-filters :deep(.mud-field) {
+    margin-top: 0;
+}

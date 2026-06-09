@@ -1,0 +1,116 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" />
+            Kategorie bearbeiten
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string"
+                          Label="Name"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Required="true"
+                          RequiredError="Name ist erforderlich."
+                          @bind-Value="_model.Name"
+                          Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Kommentar"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          @bind-Value="_model.Comment"
+                          Class="mb-3" />
+
+            <MudNumericField T="int"
+                             Label="Mindestbestand"
+                             Min="0"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             @bind-Value="_model.MinimumAmount"
+                             Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Nachbestell-E-Mail"
+                          HelperText="Leer lassen, wenn die Standard-IT-/Stock-Email verwendet werden soll."
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          @bind-Value="_model.RestockEmail"
+                          Class="mb-3" />
+
+            <MudPaper Class="pa-3" Elevation="0" Style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+                <MudCheckBox T="bool"
+                             @bind-Value="_model.NeedsNotification"
+                             Label="Bei niedrigem Bestand benachrichtigen"
+                             Color="Color.Primary" />
+            </MudPaper>
+        </MudForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public int CategoryId { get; set; }
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string Comment { get; set; } = "";
+    [Parameter] public int MinimumAmount { get; set; }
+    [Parameter] public bool NeedsNotification { get; set; }
+    [Parameter] public string RestockEmail { get; set; } = "";
+
+    private MudForm _form = null!;
+    private CategoryFormModel _model = new();
+
+    protected override void OnInitialized()
+    {
+        _model = new CategoryFormModel
+        {
+            CategoryId = CategoryId,
+            Name = Name,
+            Comment = Comment,
+            MinimumAmount = MinimumAmount,
+            NeedsNotification = NeedsNotification,
+            RestockEmail = RestockEmail
+        };
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task Submit()
+    {
+        await _form.ValidateAsync();
+
+        if (!_form.IsValid)
+            return;
+
+        var request = new SaveCategoryRequest(
+            CategoryId: _model.CategoryId,
+            Name: _model.Name,
+            Comment: _model.Comment,
+            MinimumAmount: _model.MinimumAmount,
+            NeedsNotification: _model.NeedsNotification,
+            RestockEmail: _model.RestockEmail);
+
+        MudDialog.Close(DialogResult.Ok(request));
+    }
+
+    private sealed class CategoryFormModel
+    {
+        public int CategoryId { get; set; }
+        public string Name { get; set; } = "";
+        public string Comment { get; set; } = "";
+        public int MinimumAmount { get; set; }
+        public bool NeedsNotification { get; set; }
+        public string RestockEmail { get; set; } = "";
+    }
+}

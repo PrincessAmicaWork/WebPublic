@@ -1,0 +1,197 @@
+﻿<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(IsNew? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(IsNew ? "Neuen Katalogartikel erstellen" : "Katalogartikel bearbeiten")
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField T="string"
+                          Label="Action-Code"
+                          HelperText="Interner Kürzel, z.B. NB-STD"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          @bind-Value="_model.ActionCode"
+                          Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Kategorie"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Required="true"
+                          RequiredError="Kategorie ist erforderlich."
+                          @bind-Value="_model.CategoryName"
+                          Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Artikel-Name"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Required="true"
+                          RequiredError="Artikel-Name ist erforderlich."
+                          @bind-Value="_model.ItemName"
+                          Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Hersteller"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          @bind-Value="_model.Manufacturer"
+                          Class="mb-3" />
+
+            <MudGrid Spacing="2" Class="mb-3">
+                <MudItem xs="4">
+                    <MudTextField T="string"
+                                  Label="Währung"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  @bind-Value="_model.Currency" />
+                </MudItem>
+                <MudItem xs="4">
+                    <MudNumericField T="decimal"
+                                     Label="Preis"
+                                     Min="0"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     @bind-Value="_model.Price" />
+                </MudItem>
+                <MudItem xs="4">
+                    <MudTextField T="string"
+                                  Label="Abrechnung"
+                                  HelperText="z.B. ohne, monatlich"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  @bind-Value="_model.BillingType" />
+                </MudItem>
+            </MudGrid>
+
+            <MudSelect T="CatalogFulfillmentMode"
+                       Label="Fulfillment-Modus"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       @bind-Value="_model.FulfillmentMode"
+                       Class="mb-3">
+                <MudSelectItem T="CatalogFulfillmentMode" Value="CatalogFulfillmentMode.ConsumableNoStock">Verbrauchsmaterial (kein Lager)</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode" Value="CatalogFulfillmentMode.StockManaged">Lagerverwaltet</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode" Value="CatalogFulfillmentMode.StockOrExternalOrder">Lager oder Externe Bestellung</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode" Value="CatalogFulfillmentMode.ExternalOrderOnly">Nur Externe Bestellung</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode" Value="CatalogFulfillmentMode.ServiceChange">Service-Wechsel</MudSelectItem>
+                <MudSelectItem T="CatalogFulfillmentMode" Value="CatalogFulfillmentMode.ReturnAction">Rückgabe-Aktion</MudSelectItem>
+            </MudSelect>
+
+            <MudSelect T="int?"
+                       Label="Lager-Kategorie (optional)"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Clearable="true"
+                       @bind-Value="_model.StorageCategoryId"
+                       Class="mb-3">
+                <MudSelectItem T="int?" Value="@((int?)null)">– keine –</MudSelectItem>
+                @foreach (var cat in Categories)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)cat.ID)">@cat.Name?.Trim()</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudPaper Class="pa-3" Elevation="0" Style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+                <MudCheckBox T="bool"
+                             @bind-Value="_model.Returnable"
+                             Label="Rückgabepflichtig"
+                             Color="Color.Primary" />
+                <MudCheckBox T="bool"
+                             @bind-Value="_model.RequiresComment"
+                             Label="Notiz beim Bestellen erforderlich"
+                             Color="Color.Primary" />
+                <MudCheckBox T="bool"
+                             @bind-Value="_model.IsActive"
+                             Label="Aktiv"
+                             Color="Color.Primary" />
+            </MudPaper>
+        </MudForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public RequestCatalogItem? Item { get; set; }
+    [Parameter] public List<Category> Categories { get; set; } = new();
+
+    private MudForm _form = null!;
+    private CatalogItemFormModel _model = new();
+
+    private bool IsNew => Item is null || Item.Id == 0;
+
+    protected override void OnInitialized()
+    {
+        if (Item is not null)
+        {
+            _model = new CatalogItemFormModel
+            {
+                ActionCode = Item.ActionCode,
+                CategoryName = Item.CategoryName,
+                Manufacturer = Item.Manufacturer,
+                ItemName = Item.ItemName,
+                Currency = Item.Currency,
+                Price = Item.Price,
+                BillingType = Item.BillingType,
+                FulfillmentMode = Item.FulfillmentMode,
+                Returnable = Item.Returnable,
+                RequiresComment = Item.RequiresComment,
+                IsActive = Item.IsActive,
+                StorageCategoryId = Item.StorageCategoryId
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        var result = new RequestCatalogItem
+        {
+            Id = Item?.Id ?? 0,
+            ActionCode = _model.ActionCode.Trim(),
+            CategoryName = _model.CategoryName.Trim(),
+            Manufacturer = _model.Manufacturer.Trim(),
+            ItemName = _model.ItemName.Trim(),
+            Currency = _model.Currency.Trim(),
+            Price = _model.Price,
+            BillingType = _model.BillingType.Trim(),
+            FulfillmentMode = _model.FulfillmentMode,
+            Returnable = _model.Returnable,
+            RequiresComment = _model.RequiresComment,
+            IsActive = _model.IsActive,
+            StorageCategoryId = _model.StorageCategoryId
+        };
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    private sealed class CatalogItemFormModel
+    {
+        public string ActionCode { get; set; } = "";
+        public string CategoryName { get; set; } = "";
+        public string Manufacturer { get; set; } = "";
+        public string ItemName { get; set; } = "";
+        public string Currency { get; set; } = "CHF";
+        public decimal Price { get; set; }
+        public string BillingType { get; set; } = "ohne";
+        public CatalogFulfillmentMode FulfillmentMode { get; set; } = CatalogFulfillmentMode.ConsumableNoStock;
+        public bool Returnable { get; set; }
+        public bool RequiresComment { get; set; }
+        public bool IsActive { get; set; } = true;
+        public int? StorageCategoryId { get; set; }
+    }
+}

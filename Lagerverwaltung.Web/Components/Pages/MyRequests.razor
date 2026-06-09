@@ -1,0 +1,564 @@
+@page "/my-requests"
+@attribute [Authorize]
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using Lagerverwaltung.Web.Data
+@using Lagerverwaltung.Web.Models
+@inject IEquipmentService EquipmentSvc
+@inject IEquipmentOrderService OrderSvc
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IReturnService ReturnSvc
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Meine Anfragen & Bestellungen – Lagerverwaltung</PageTitle>
+
+<div class="my-requests-page">
+    <MudText Typo="Typo.h4" Class="page-title">Meine Anfragen & Bestellungen</MudText>
+    <MudText Typo="Typo.body1" Class="page-subtitle">
+        Hier siehst du automatisch alle neuen Bestellungen und bisherigen Einzelanfragen für dein eingeloggtes Konto.
+    </MudText>
+
+    @if (!_authChecked)
+    {
+        <MudPaper Class="requests-result-card pa-4" Elevation="1">
+            <MudProgressLinear Indeterminate="true" Color="Color.Error" />
+        </MudPaper>
+    }
+    else if (!_isAuthenticated)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-4 mb-3">
+            Du bist nicht angemeldet. Bitte melde dich mit deinem Firmenkonto an.
+        </MudAlert>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Login"
+                   OnClick="Login">
+            Anmelden
+        </MudButton>
+    }
+    else if (string.IsNullOrWhiteSpace(_userEmail))
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">
+            Du bist angemeldet, aber deine E-Mail-Adresse konnte nicht aus dem Login gelesen werden.
+            Bitte IT kontaktieren.
+        </MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudPaper Class="requests-result-card pa-4" Elevation="1">
+            <MudProgressLinear Indeterminate="true" Color="Color.Error" />
+        </MudPaper>
+    }
+    else if (!HasAnyData)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            Keine Bestellungen, ausgegebenen Geräte oder Anfragen für <strong>@_userEmail</strong> gefunden.
+        </MudAlert>
+    }
+    else
+    {
+        <MudPaper Elevation="0"
+                  Class="pa-6 my-4 rounded-xl"
+                  Style="background: radial-gradient(circle at 96% 18%, rgba(44, 179, 74, 0.16), transparent 28%), linear-gradient(135deg, rgba(0, 86, 145, 0.10), rgba(255, 255, 255, 0.95) 42%, rgba(245, 248, 251, 0.98)); border: 1px solid rgba(0, 86, 145, 0.16); box-shadow: 0 20px 45px rgba(0, 41, 77, 0.10);">
+
+            <MudGrid Spacing="4" AlignItems="AlignItems.Start">
+
+                <MudItem xs="12" md="7" Class="d-flex align-center gap-4">
+                    <MudPaper Elevation="0"
+                              Class="d-flex align-center justify-center rounded-lg pa-3"
+                              Style="background: linear-gradient(135deg, #005691, #008ecf); color: white; min-width: 52px; height: 52px; box-shadow: 0 14px 24px rgba(0, 86, 145, 0.26);">
+                        <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" />
+                    </MudPaper>
+
+                    <div>
+                        <MudText Typo="Typo.caption" Style="color: #005691; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase;" Class="d-block mb-1">
+                            Übersicht für @_userEmail
+                        </MudText>
+                        <MudText Typo="Typo.h6" Style="font-weight: 800; color: #16202a;">
+                            Deine Bestellungen und ausgegebenen Geräte
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+                            Aktive Geräte, offene Bestellungen, Rückgaben und ältere Einzelanfragen werden getrennt dargestellt.
+                        </MudText>
+                    </div>
+                </MudItem>
+
+                <MudItem xs="12" md="5" Class="d-flex flex-wrap gap-3 justify-start justify-md-end align-center">
+
+                    <MudPaper Class="d-flex flex-column align-start justify-center pa-3 rounded-lg"
+                              Style="min-width: 96px; border: 1px solid rgba(0, 86, 145, 0.12); border-left: 4px solid #ffb300; background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(8px);"
+                              Elevation="1">
+                        <MudText Typo="Typo.h5" Style="font-weight: 800; line-height: 1; color: #16202a;">@OpenOrders.Count</MudText>
+                        <MudText Typo="Typo.caption" Style="font-weight: 800; color: #667085; text-transform: uppercase; letter-spacing: 0.02em;" Class="mt-1">offen</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="d-flex flex-column align-start justify-center pa-3 rounded-lg"
+                              Style="min-width: 96px; border: 1px solid rgba(0, 86, 145, 0.12); border-left: 4px solid #2cb34a; background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(8px);"
+                              Elevation="1">
+                        <MudText Typo="Typo.h5" Style="font-weight: 800; line-height: 1; color: #16202a;">@IssuedEquipmentLineCount</MudText>
+                        <MudText Typo="Typo.caption" Style="font-weight: 800; color: #667085; text-transform: uppercase; letter-spacing: 0.02em;" Class="mt-1">ausgegeben</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="d-flex flex-column align-start justify-center pa-3 rounded-lg"
+                              Style="min-width: 96px; border: 1px solid rgba(0, 86, 145, 0.12); border-left: 4px solid #008ecf; background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(8px);"
+                              Elevation="1">
+                        <MudText Typo="Typo.h5" Style="font-weight: 800; line-height: 1; color: #16202a;">@PendingOrderLineReturnCount</MudText>
+                        <MudText Typo="Typo.caption" Style="font-weight: 800; color: #667085; text-transform: uppercase; letter-spacing: 0.02em;" Class="mt-1">Rückgaben</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="d-flex flex-column align-start justify-center pa-3 rounded-lg"
+                              Style="min-width: 96px; border: 1px solid rgba(0, 86, 145, 0.12); border-left: 4px solid #8a8f98; background: rgba(255, 255, 255, 0.72); backdrop-filter: blur(8px);"
+                              Elevation="1">
+                        <MudText Typo="Typo.h5" Style="font-weight: 800; line-height: 1; color: #16202a;">@_requests.Count</MudText>
+                        <MudText Typo="Typo.caption" Style="font-weight: 800; color: #667085; text-transform: uppercase; letter-spacing: 0.02em;" Class="mt-1">Legacy</MudText>
+                    </MudPaper>
+
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (IssuedEquipmentOrders.Any())
+        {
+            <div class="section-heading">
+                <div>
+                    <MudText Typo="Typo.h6" Class="section-title">Meine ausgegebenen Geräte</MudText>
+                    <MudText Typo="Typo.caption" Class="section-subtitle">Aktive Lagerpositionen, die dir zugeordnet sind und einzeln zurückgegeben werden können.</MudText>
+                </div>
+            </div>
+            <MudPaper Class="requests-result-card requests-result-card--shine mb-5" Elevation="1">
+                <IssuedEquipmentTable Orders="@IssuedEquipmentOrders"
+                                      ActionBusy="@_returnBusy"
+                                      OrderLineReturnStatuses="@_orderLineReturnStatuses"
+                                      OnRequestReturn="OpenOrderLineReturnDialog" />
+            </MudPaper>
+        }
+
+        @if (OpenOrders.Any())
+        {
+            <div class="section-heading">
+                <div>
+                    <MudText Typo="Typo.h6" Class="section-title">Meine offenen Bestellungen</MudText>
+                    <MudText Typo="Typo.caption" Class="section-subtitle">Bestellungen, die noch auf Freigabe, Vorbereitung oder Abgabe warten.</MudText>
+                </div>
+            </div>
+            <MudPaper Class="requests-result-card requests-result-card--shine mb-5" Elevation="1">
+                <OrderRequestsTable Orders="@OpenOrders" />
+            </MudPaper>
+        }
+
+        @if (HistoryOrders.Any())
+        {
+            <div class="section-heading section-heading--muted">
+                <div>
+                    <MudText Typo="Typo.h6" Class="section-title">Abgeschlossene oder abgelehnte Bestellungen</MudText>
+                    <MudText Typo="Typo.caption" Class="section-subtitle">Historie deiner neuen Bestellungen.</MudText>
+                </div>
+            </div>
+            <MudPaper Class="requests-result-card requests-result-card--shine mb-5" Elevation="1">
+                <OrderRequestsTable Orders="@HistoryOrders" />
+            </MudPaper>
+        }
+
+        @if (_requests.Any())
+        {
+            <div class="section-heading section-heading--legacy">
+                <div>
+                    <MudText Typo="Typo.h6" Class="section-title">Bisherige Einzelanfragen</MudText>
+                    <MudText Typo="Typo.caption" Class="section-subtitle">Legacy-Anfragen aus dem alten Einzelartikel-Flow.</MudText>
+                </div>
+            </div>
+            <MudPaper Class="requests-result-card requests-result-card--shine" Elevation="1">
+                <MudTable Items="_requests"
+                          Hover="true"
+                          Striped="true"
+                          Breakpoint="Breakpoint.Md"
+                          Class="requests-table">
+                    <HeaderContent>
+                        <MudTh>Ticket</MudTh>
+                        <MudTh>Datum</MudTh>
+                        <MudTh>Equipment</MudTh>
+                        <MudTh>Kategorie</MudTh>
+                        <MudTh>Zustand</MudTh>
+                        <MudTh>Gebraucht OK</MudTh>
+                        <MudTh Style="text-align:center;">Status</MudTh>
+                        <MudTh>Rückgabe</MudTh>
+                        <MudTh>Kommentar</MudTh>
+                    </HeaderContent>
+
+                    <RowTemplate Context="request">
+                        <MudTd DataLabel="Ticket">
+                            <MudText Typo="Typo.body2" Class="mono-text" Style="font-weight:700;">
+                                @request.DisplayTicketNumber
+                            </MudText>
+                        </MudTd>
+
+                        <MudTd DataLabel="Datum">
+                            <MudText Typo="Typo.caption">
+                                @request.RequestDate.ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                        </MudTd>
+
+                        <MudTd DataLabel="Equipment">
+                            <MudText Typo="Typo.body2">
+                                @(request.Position?.Description?.Trim() ?? "")
+                            </MudText>
+                        </MudTd>
+
+                        <MudTd DataLabel="Kategorie">
+                            <MudText Typo="Typo.body2" Class="category-text">
+                                @(request.Position?.Category?.Name?.Trim() ?? "")
+                            </MudText>
+                        </MudTd>
+
+                        <MudTd DataLabel="Zustand">
+                            <MudChip T="string" Color="@(request.Position?.StockCondition == StockCondition.Used ? Color.Secondary : Color.Primary)" Size="Size.Small">
+                                @(request.Position?.StockConditionLabel ?? "Neu")
+                            </MudChip>
+                        </MudTd>
+
+                        <MudTd DataLabel="Gebraucht OK">
+                            <MudText Typo="Typo.caption" Class="comment-text">
+                                @(request.UsedItemOk ? "Ja" : "Nein")
+                            </MudText>
+                        </MudTd>
+
+                        <MudTd DataLabel="Status" Style="text-align:center;">
+                            <StatusChip Status="@request.Status" />
+                            @if (request.FulfillmentType.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Class="comment-text d-block mt-1">
+                                    @(request.FulfillmentType.Value == RequestFulfillmentType.NewFromStock ? "Neu" : "Gebraucht")
+                                </MudText>
+                            }
+                        </MudTd>
+
+                        <MudTd DataLabel="Rückgabe">
+                            @if (request.Status != RequestStatus.Collected)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">–</MudText>
+                            }
+                            else if (_returnStatuses.TryGetValue(request.Id, out var returnStatus))
+                            {
+                                <MudChip T="string" Color="@GetReturnStatusColor(returnStatus)" Size="Size.Small">
+                                    @GetReturnStatusLabel(returnStatus)
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Filled"
+                                           Color="Color.Secondary"
+                                           StartIcon="@Icons.Material.Filled.KeyboardReturn"
+                                           OnClick="@(() => OpenReturnDialog(request))">
+                                    Rückgabe anmelden
+                                </MudButton>
+                            }
+                        </MudTd>
+
+                        <MudTd DataLabel="Kommentar">
+                            <MudText Typo="Typo.caption" Class="comment-text">
+                                @(string.IsNullOrWhiteSpace(request.BossComment) || request.BossComment == " " ? "–" : request.BossComment)
+                            </MudText>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    }
+
+    <MudDialog @bind-Visible="_returnDialogOpen">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.KeyboardReturn" Class="mr-2" />
+                Rückgabe anmelden
+            </MudText>
+        </TitleContent>
+
+        <DialogContent>
+            <MudText Class="mb-3">
+                Rückgabe für <b>@ReturnDialogTargetLabel</b> anmelden?
+            </MudText>
+            <MudAlert Severity="Severity.Info" Class="mb-3">
+                IT bekommt eine Email. Bitte bring den Artikel erst danach wie vereinbart zurück. IT bestätigt die Rückgabe, sobald der Artikel physisch da ist.
+            </MudAlert>
+            <MudTextField T="string"
+                          Label="Kommentar (optional)"
+                          Lines="3"
+                          Variant="Variant.Outlined"
+                          @bind-Value="_returnComment" />
+        </DialogContent>
+
+        <DialogActions>
+            <MudButton OnClick="CloseReturnDialog">Abbrechen</MudButton>
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       Disabled="_returnBusy"
+                       StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="ConfirmReturnRequestAsync">
+                Rückgabe anmelden
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+</div>
+
+@code {
+    private bool _authChecked;
+    private bool _isAuthenticated;
+    private bool _loading = true;
+    private bool _returnBusy;
+    private string _userEmail = "";
+    private string _userName = "";
+    private List<EquipmentOrder> _orders = new();
+    private List<EquipmentRequest> _requests = new();
+    private Dictionary<int, ReturnRequestStatus> _returnStatuses = new();
+    private Dictionary<int, ReturnRequestStatus> _orderLineReturnStatuses = new();
+
+
+    private bool HasAnyData => _orders.Any() || _requests.Any();
+
+    private List<EquipmentOrder> OpenOrders => _orders
+        .Where(o => o.Status is OrderStatus.PendingApproval or OrderStatus.Approved or OrderStatus.PartiallyFulfilled)
+        .ToList();
+
+    private List<EquipmentOrder> HistoryOrders => _orders
+        .Where(o => o.Status is OrderStatus.Completed or OrderStatus.Denied or OrderStatus.Cancelled)
+        .ToList();
+
+    private List<EquipmentOrder> IssuedEquipmentOrders => _orders
+        .Where(o => o.Lines.Any(IsIssuedEquipmentLine))
+        .ToList();
+
+    private int IssuedEquipmentLineCount => _orders
+        .SelectMany(o => o.Lines)
+        .Count(IsIssuedEquipmentLine);
+
+    private int PendingOrderLineReturnCount => _orderLineReturnStatuses
+        .Count(x => x.Value == ReturnRequestStatus.Pending);
+
+    private static bool IsIssuedEquipmentLine(EquipmentOrderLine line)
+    {
+        return line.EffectiveFulfillmentMode == EffectiveFulfillmentMode.UseStorage
+            && line.PositionId.HasValue
+            && line.Status is OrderLineStatus.Fulfilled or OrderLineStatus.Returned;
+    }
+
+    private bool _returnDialogOpen;
+    private EquipmentRequest? _returnTarget;
+    private EquipmentOrderLine? _orderLineReturnTarget;
+    private string _orderLineReturnTicket = "";
+    private string _returnComment = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequests();
+    }
+
+    private async Task LoadRequests()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        _isAuthenticated = user.Identity?.IsAuthenticated ?? false;
+        _userEmail = GetUserEmail(user);
+        _userName = GetUserName(user);
+        _authChecked = true;
+
+        if (!_isAuthenticated || string.IsNullOrWhiteSpace(_userEmail))
+        {
+            _orders = new();
+            _requests = new();
+            _returnStatuses = new();
+            _orderLineReturnStatuses = new();
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var normalizedEmail = _userEmail.Trim().ToLowerInvariant();
+            _orders = await LoadOrdersFromDbForEmailAsync(normalizedEmail);
+            _requests = await EquipmentSvc.GetRequestsByEmailAsync(normalizedEmail);
+            _returnStatuses = await ReturnSvc.GetReturnStatusesForRequestsAsync(_requests.Select(r => r.Id));
+            _orderLineReturnStatuses = await ReturnSvc.GetReturnStatusesForOrderLinesAsync(
+                _orders.SelectMany(o => o.Lines).Select(l => l.Id));
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task<List<EquipmentOrder>> LoadOrdersFromDbForEmailAsync(string normalizedEmail)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedEmail))
+            return new List<EquipmentOrder>();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var allOrders = await db.EquipmentOrders
+            .AsNoTracking()
+            .Include(o => o.Lines)
+            .OrderByDescending(o => o.CreatedAt)
+            .ThenByDescending(o => o.Id)
+            .ToListAsync();
+
+        return allOrders
+            .Where(o =>
+                IsSameEmail(o.OrderedByEmail, normalizedEmail) ||
+                IsSameEmail(o.RequestedForEmail, normalizedEmail) ||
+                IsSameEmail(o.PickupContactEmail, normalizedEmail))
+            .ToList();
+    }
+
+    private static bool IsSameEmail(string? left, string? right)
+    {
+        return string.Equals(
+            (left ?? string.Empty).Trim(),
+            (right ?? string.Empty).Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Login()
+    {
+        Navigation.NavigateTo("/login?returnUrl=/my-requests", forceLoad: true);
+    }
+
+    private static string GetUserEmail(ClaimsPrincipal user)
+    {
+        return user.FindFirst("preferred_username")?.Value
+            ?? user.FindFirst("upn")?.Value
+            ?? user.FindFirst("email")?.Value
+            ?? user.FindFirst(ClaimTypes.Email)?.Value
+            ?? user.Identity?.Name
+            ?? "";
+    }
+
+    private static string GetUserName(ClaimsPrincipal user)
+    {
+        return user.FindFirst("name")?.Value
+            ?? user.Identity?.Name
+            ?? "";
+    }
+
+    private static string GetReturnStatusLabel(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.Pending => "Rückgabe angemeldet",
+            ReturnRequestStatus.ConfirmedReturned => "Zurückgegeben",
+            ReturnRequestStatus.Cancelled => "Abgebrochen",
+            _ => "Rückgabe"
+        };
+    }
+
+    private static Color GetReturnStatusColor(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.ConfirmedReturned => Color.Success,
+            ReturnRequestStatus.Cancelled => Color.Error,
+            _ => Color.Warning
+        };
+    }
+
+    private string ReturnDialogTargetLabel
+    {
+        get
+        {
+            if (_returnTarget is not null)
+                return _returnTarget.DisplayTicketNumber;
+
+            if (_orderLineReturnTarget is not null)
+            {
+                var ticket = string.IsNullOrWhiteSpace(_orderLineReturnTicket)
+                    ? $"Bestellung #{_orderLineReturnTarget.EquipmentOrderId}"
+                    : _orderLineReturnTicket;
+
+                return $"{ticket} / {_orderLineReturnTarget.DisplayName}";
+            }
+
+            return "diesen Artikel";
+        }
+    }
+
+    private void OpenReturnDialog(EquipmentRequest request)
+    {
+        _returnTarget = request;
+        _orderLineReturnTarget = null;
+        _orderLineReturnTicket = "";
+        _returnComment = "";
+        _returnDialogOpen = true;
+    }
+
+    private Task OpenOrderLineReturnDialog(EquipmentOrderLine line)
+    {
+        _returnTarget = null;
+        _orderLineReturnTarget = line;
+        _orderLineReturnTicket = _orders
+            .FirstOrDefault(o => o.Lines.Any(l => l.Id == line.Id))
+            ?.DisplayTicketNumber ?? "";
+        _returnComment = "";
+        _returnDialogOpen = true;
+        return Task.CompletedTask;
+    }
+
+    private void CloseReturnDialog()
+    {
+        _returnDialogOpen = false;
+        _returnTarget = null;
+        _orderLineReturnTarget = null;
+        _orderLineReturnTicket = "";
+        _returnComment = "";
+    }
+
+    private async Task ConfirmReturnRequestAsync()
+    {
+        if ((_returnTarget is null && _orderLineReturnTarget is null) || _returnBusy)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_userEmail))
+        {
+            Snackbar.Add("Benutzer-Email konnte nicht erkannt werden. Bitte neu anmelden.", Severity.Warning);
+            return;
+        }
+
+        _returnBusy = true;
+
+        try
+        {
+            var result = _returnTarget is not null
+                ? await ReturnSvc.RequestReturnAsync(
+                    _returnTarget.Id,
+                    _userEmail,
+                    _returnComment)
+                : await ReturnSvc.RequestOrderLineReturnAsync(
+                    _orderLineReturnTarget!.Id,
+                    _userEmail,
+                    _returnComment);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add("Rückgabe wurde angemeldet. IT wurde informiert.", Severity.Success);
+            CloseReturnDialog();
+            await LoadRequests();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Rückgabe konnte nicht angemeldet werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _returnBusy = false;
+        }
+    }
+}

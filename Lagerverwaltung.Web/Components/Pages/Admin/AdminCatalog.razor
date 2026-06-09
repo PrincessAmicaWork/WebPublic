@@ -1,0 +1,495 @@
+﻿@page "/admin/catalog"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using Lagerverwaltung.Web.Models
+@using Lagerverwaltung.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+
+@inject ICatalogService CatalogSvc
+@inject IDialogService DialogSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Katalog-Verwaltung – Lagerverwaltung</PageTitle>
+
+<div class="catalog-admin-page">
+    <MudPaper Elevation="0"
+              Class="pa-6 mb-6 rounded-xl"
+              Style="background: linear-gradient(135deg, rgba(0, 86, 145, 0.08), rgba(255,255,255,0.97)); border: 1px solid rgba(0, 86, 145, 0.12); box-shadow: 0 16px 32px rgba(0,41,77,0.07);">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+            <MudPaper Elevation="0"
+                      Class="d-flex align-center justify-center rounded-lg pa-3"
+                      Style="background: linear-gradient(135deg, #005691, #008ecf); color: white; min-width: 56px; height: 56px;">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Large" />
+            </MudPaper>
+            <div>
+                <MudText Typo="Typo.h4" Style="font-weight:850;letter-spacing:-0.03em;color:#16202a;">Katalog-Verwaltung</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary mt-1">
+                    Globale Katalogartikel verwalten und pro Standort zuweisen.
+                </MudText>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+    }
+    else
+    {
+        <MudGrid Spacing="4">
+
+            <!-- LEFT: Global catalog items -->
+            <MudItem xs="12" md="5">
+                <MudPaper Elevation="0" Class="pa-4 rounded-xl"
+                          Style="border: 1px solid rgba(0,86,145,0.10); min-height: 600px;">
+
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.h6" Style="font-weight:700;">Katalogartikel (global)</MudText>
+                        <MudSpacer />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@_globalItems.Count</MudChip>
+                    </MudStack>
+
+                    <MudTextField T="string"
+                                  @bind-Value="_globalSearch"
+                                  Label="Suche"
+                                  Placeholder="Name, Code, Kategorie ..."
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  DebounceInterval="200"
+                                  OnDebounceIntervalElapsed="@(_ => ApplyGlobalFilter())"
+                                  Clearable="true"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Class="mb-3" />
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               Size="Size.Small"
+                               OnClick="OpenCreateGlobalItemDialogAsync"
+                               Class="mb-3">
+                        Neuen Artikel erstellen
+                    </MudButton>
+
+                    @if (!_filteredGlobalItems.Any())
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">Keine Katalogartikel gefunden.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="_filteredGlobalItems"
+                                  Dense="true"
+                                  Hover="true"
+                                  Elevation="0"
+                                  Class="rounded-lg overflow-hidden"
+                                  Style="border: 1px solid rgba(0,86,145,0.08);"
+                                  SelectedItem="_selectedGlobalItem"
+                                  SelectedItemChanged="@((RequestCatalogItem? item) => { _selectedGlobalItem = item; })">
+                            <HeaderContent>
+                                <MudTh>Code / Name</MudTh>
+                                <MudTh>Kategorie</MudTh>
+                                <MudTh Style="width:32px;" />
+                            </HeaderContent>
+                            <RowTemplate Context="item">
+                                <MudTd DataLabel="Code / Name">
+                                    <MudText Typo="Typo.body2" Style="font-weight:600;">@item.DisplayName</MudText>
+                                    @if (!item.IsActive)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="ml-1">inaktiv</MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Kategorie">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@item.CategoryName</MudText>
+                                </MudTd>
+                                <MudTd>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   Color="Color.Primary"
+                                                   Title="Bearbeiten"
+                                                   OnClick="@(() => OpenEditGlobalItemDialogAsync(item))" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- RIGHT: Site assignments -->
+            <MudItem xs="12" md="7">
+                <MudPaper Elevation="0" Class="pa-4 rounded-xl"
+                          Style="border: 1px solid rgba(0,86,145,0.10); min-height: 600px;">
+
+                    <MudText Typo="Typo.h6" Style="font-weight:700;" Class="mb-3">Standort-Zuweisung</MudText>
+
+                    <MudSelect T="Site?"
+                               Label="Standort wählen"
+                               Value="_selectedSite"
+                               ValueChanged="OnSiteChangedAsync"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               ToStringFunc="@(s => s?.Name ?? "")"
+                               Class="mb-4">
+                        <MudSelectItem T="Site?" Value="@((Site?)null)">– bitte wählen –</MudSelectItem>
+                        @foreach (var site in _sites)
+                        {
+                            <MudSelectItem T="Site?" Value="@site">@site.Name (@site.Code)</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    @if (_selectedSite is not null)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudText Typo="Typo.subtitle2">
+                                Zugewiesene Artikel für <b>@_selectedSite.Name</b>
+                            </MudText>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Add"
+                                       Size="Size.Small"
+                                       Disabled="_loadingSiteItems"
+                                       OnClick="OpenAddItemToSiteDialogAsync">
+                                Artikel hinzufügen
+                            </MudButton>
+                        </MudStack>
+
+                        @if (_loadingSiteItems)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        }
+                        else if (!_siteItems.Any())
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true">
+                                Diesem Standort sind noch keine Katalogartikel zugewiesen.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudTable Items="_siteItems"
+                                      Dense="true"
+                                      Hover="true"
+                                      Elevation="0"
+                                      Class="rounded-lg overflow-hidden"
+                                      Style="border: 1px solid rgba(0,86,145,0.08);">
+                                <HeaderContent>
+                                    <MudTh>Artikel</MudTh>
+                                    <MudTh Style="width:60px;text-align:center;">Sort</MudTh>
+                                    <MudTh Style="width:80px;text-align:center;">Aktiv</MudTh>
+                                    <MudTh Style="width:96px;text-align:center;">Aktionen</MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="siteItem">
+                                    <MudTd DataLabel="Artikel">
+                                        <MudText Typo="Typo.body2" Style="font-weight:600;">@siteItem.CatalogItem?.DisplayName</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@siteItem.CatalogItem?.CategoryName</MudText>
+                                        @if (siteItem.PriceOverride.HasValue || !string.IsNullOrWhiteSpace(siteItem.BillingTypeOverride?.Trim()) || siteItem.FulfillmentModeOverride.HasValue)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mt-1">Override aktiv</MudChip>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Sort" Style="text-align:center;">
+                                        <MudText Typo="Typo.body2">@siteItem.SortOrder</MudText>
+                                    </MudTd>
+                                    <MudTd DataLabel="Aktiv" Style="text-align:center;">
+                                        <MudSwitch T="bool"
+                                                   Value="siteItem.IsActive"
+                                                   ValueChanged="@(v => ToggleSiteItemActiveAsync(siteItem, v))"
+                                                   Color="Color.Success"
+                                                   Size="Size.Small" />
+                                    </MudTd>
+                                    <MudTd DataLabel="Aktionen" Style="text-align:center;">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Tune"
+                                                       Size="Size.Small"
+                                                       Color="Color.Primary"
+                                                       Title="Overrides bearbeiten"
+                                                       OnClick="@(() => OpenEditSiteItemDialogAsync(siteItem))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LinkOff"
+                                                       Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       Title="Vom Standort entfernen"
+                                                       OnClick="@(() => RemoveSiteItemAsync(siteItem))" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            Bitte zuerst einen Standort auswählen.
+                        </MudAlert>
+                    }
+                </MudPaper>
+            </MudItem>
+
+        </MudGrid>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _loadingSiteItems;
+
+    private List<RequestCatalogItem> _globalItems = new();
+    private List<RequestCatalogItem> _filteredGlobalItems = new();
+    private List<Site> _sites = new();
+    private List<SiteCatalogItem> _siteItems = new();
+    private List<Category> _siteCategories = new();
+
+    private string _globalSearch = "";
+    private RequestCatalogItem? _selectedGlobalItem;
+    private Site? _selectedSite;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var itemsTask = CatalogSvc.GetAllGlobalItemsAsync();
+            var sitesTask = CatalogSvc.GetAllSitesAsync();
+
+            await Task.WhenAll(itemsTask, sitesTask);
+
+            _globalItems = itemsTask.Result;
+            _sites = sitesTask.Result;
+            ApplyGlobalFilter();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyGlobalFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_globalSearch))
+        {
+            _filteredGlobalItems = _globalItems;
+            return;
+        }
+
+        var search = _globalSearch.Trim();
+        _filteredGlobalItems = _globalItems
+            .Where(x =>
+                x.ActionCode.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.ItemName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.CategoryName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.Manufacturer.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task OnSiteChangedAsync(Site? site)
+    {
+        _selectedSite = site;
+        _siteItems = new();
+        _siteCategories = new();
+
+        if (site is null)
+            return;
+
+        await LoadSiteItemsAsync(site.Id);
+    }
+
+    private async Task LoadSiteItemsAsync(int siteId)
+    {
+        _loadingSiteItems = true;
+        try
+        {
+            var itemsTask = CatalogSvc.GetAllItemsForSiteAsync(siteId);
+            var catsTask = CatalogSvc.GetCategoriesForSiteAsync(siteId);
+            await Task.WhenAll(itemsTask, catsTask);
+            _siteItems = itemsTask.Result;
+            _siteCategories = catsTask.Result;
+        }
+        finally
+        {
+            _loadingSiteItems = false;
+        }
+    }
+
+    private async Task OpenCreateGlobalItemDialogAsync()
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(CatalogItemEditDialog.Item)] = (RequestCatalogItem?)null,
+            [nameof(CatalogItemEditDialog.Categories)] = new List<Category>()
+        };
+
+        var dialog = await DialogSvc.ShowAsync<CatalogItemEditDialog>("Neuen Katalogartikel erstellen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: RequestCatalogItem newItem })
+        {
+            try
+            {
+                await CatalogSvc.SaveGlobalItemAsync(newItem);
+                _globalItems = await CatalogSvc.GetAllGlobalItemsAsync();
+                ApplyGlobalFilter();
+                Snackbar.Add("Katalogartikel erstellt.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Fehler beim Erstellen: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditGlobalItemDialogAsync(RequestCatalogItem item)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(CatalogItemEditDialog.Item)] = item,
+            [nameof(CatalogItemEditDialog.Categories)] = new List<Category>()
+        };
+
+        var dialog = await DialogSvc.ShowAsync<CatalogItemEditDialog>("Katalogartikel bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: RequestCatalogItem updated })
+        {
+            try
+            {
+                await CatalogSvc.SaveGlobalItemAsync(updated);
+                _globalItems = await CatalogSvc.GetAllGlobalItemsAsync();
+                ApplyGlobalFilter();
+
+                if (_selectedSite is not null)
+                    await LoadSiteItemsAsync(_selectedSite.Id);
+
+                Snackbar.Add("Katalogartikel gespeichert.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Fehler beim Speichern: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenAddItemToSiteDialogAsync()
+    {
+        if (_selectedSite is null)
+            return;
+
+        var assignedIds = _siteItems.Select(x => x.CatalogItemId).ToHashSet();
+        var unassigned = _globalItems.Where(x => !assignedIds.Contains(x.Id)).ToList();
+
+        if (!unassigned.Any())
+        {
+            Snackbar.Add("Alle Katalogartikel sind diesem Standort bereits zugewiesen.", Severity.Info);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            [nameof(AddCatalogItemToSiteDialog.AvailableItems)] = unassigned,
+            [nameof(AddCatalogItemToSiteDialog.SiteName)] = _selectedSite.Name
+        };
+
+        var dialog = await DialogSvc.ShowAsync<AddCatalogItemToSiteDialog>(
+            $"Artikel zu {_selectedSite.Name} hinzufügen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: RequestCatalogItem pickedItem })
+        {
+            try
+            {
+                var newSiteItem = new SiteCatalogItem
+                {
+                    SiteId = _selectedSite.Id,
+                    CatalogItemId = pickedItem.Id,
+                    IsActive = true,
+                    SortOrder = _siteItems.Count > 0 ? _siteItems.Max(x => x.SortOrder) + 10 : 10
+                };
+                await CatalogSvc.SaveSiteItemAsync(newSiteItem);
+                await LoadSiteItemsAsync(_selectedSite.Id);
+                Snackbar.Add($"{pickedItem.DisplayName} wurde hinzugefügt.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Fehler beim Hinzufügen: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenEditSiteItemDialogAsync(SiteCatalogItem siteItem)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(SiteCatalogItemEditDialog.Item)] = siteItem,
+            [nameof(SiteCatalogItemEditDialog.SiteCategories)] = _siteCategories
+        };
+
+        var dialog = await DialogSvc.ShowAsync<SiteCatalogItemEditDialog>(
+            "Standort-Konfiguration", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: SiteCatalogItem updated })
+        {
+            try
+            {
+                await CatalogSvc.SaveSiteItemAsync(updated);
+                if (_selectedSite is not null)
+                    await LoadSiteItemsAsync(_selectedSite.Id);
+                Snackbar.Add("Standort-Konfiguration gespeichert.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Fehler beim Speichern: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ToggleSiteItemActiveAsync(SiteCatalogItem siteItem, bool newValue)
+    {
+        try
+        {
+            var updated = new SiteCatalogItem
+            {
+                Id = siteItem.Id,
+                SiteId = siteItem.SiteId,
+                CatalogItemId = siteItem.CatalogItemId,
+                IsActive = newValue,
+                SortOrder = siteItem.SortOrder,
+                FulfillmentModeOverride = siteItem.FulfillmentModeOverride,
+                StorageCategoryId = siteItem.StorageCategoryId,
+                PriceOverride = siteItem.PriceOverride,
+                BillingTypeOverride = siteItem.BillingTypeOverride
+            };
+            await CatalogSvc.SaveSiteItemAsync(updated);
+            if (_selectedSite is not null)
+                await LoadSiteItemsAsync(_selectedSite.Id);
+            Snackbar.Add(newValue ? "Artikel aktiviert." : "Artikel deaktiviert.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Fehler: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RemoveSiteItemAsync(SiteCatalogItem siteItem)
+    {
+        var name = siteItem.CatalogItem?.DisplayName ?? $"ID {siteItem.CatalogItemId}";
+        var confirmed = await DialogSvc.ShowMessageBoxAsync(
+            title: "Zuweisung entfernen",
+            message: $"Soll '{name}' von diesem Standort entfernt werden?",
+            yesText: "Entfernen", cancelText: "Abbrechen");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            await CatalogSvc.DeleteSiteItemAsync(siteItem.Id);
+            if (_selectedSite is not null)
+                await LoadSiteItemsAsync(_selectedSite.Id);
+            Snackbar.Add($"{name} wurde entfernt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Fehler beim Entfernen: {ex.Message}", Severity.Error);
+        }
+    }
+}

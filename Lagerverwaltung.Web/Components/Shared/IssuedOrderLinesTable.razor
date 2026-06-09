@@ -1,0 +1,182 @@
+@using Lagerverwaltung.Web.Models
+
+@if (!Rows.Any())
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="ma-3">
+        Keine ausgegebenen Geräte gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="@Rows"
+              Hover="true"
+              Dense="true"
+              Breakpoint="Breakpoint.Md"
+              Elevation="0">
+        <HeaderContent>
+            <MudTh>Ticket</MudTh>
+            <MudTh>Artikel</MudTh>
+            <MudTh>Lagerposition</MudTh>
+            <MudTh>Ausgegeben an</MudTh>
+            <MudTh>Ausgegeben am</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Rückgabe</MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="row">
+            <MudTd DataLabel="Ticket">
+                <MudText Typo="Typo.body2" Style="font-family:monospace;font-weight:700;">
+                    @row.Order.DisplayTicketNumber
+                </MudText>
+            </MudTd>
+
+            <MudTd DataLabel="Artikel">
+                <MudText Typo="Typo.body2" Style="font-weight:600;">
+                    @row.Line.DisplayName
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @CategoryLabel(row.Line)
+                </MudText>
+            </MudTd>
+
+            <MudTd DataLabel="Lagerposition">
+                <MudText Typo="Typo.body2">#@row.Line.PositionId</MudText>
+                @if (!string.IsNullOrWhiteSpace(row.Line.Position?.OrderNumber))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @row.Line.Position.OrderNumber.Trim()
+                    </MudText>
+                }
+            </MudTd>
+
+            <MudTd DataLabel="Ausgegeben an">
+                <MudText Typo="Typo.body2">@row.Order.RequestedForName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@row.Order.RequestedForEmail</MudText>
+            </MudTd>
+
+            <MudTd DataLabel="Ausgegeben am">
+                <MudText Typo="Typo.caption">
+                    @(row.Line.FulfilledAt?.ToString("dd.MM.yyyy HH:mm") ?? "-")
+                </MudText>
+            </MudTd>
+
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@LineStatusColor(row.Line.Status)">
+                    @LineStatusLabel(row.Line.Status)
+                </MudChip>
+            </MudTd>
+
+            <MudTd DataLabel="Rückgabe">
+                @if (row.Line.Status == OrderLineStatus.Returned)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                        Zurückgegeben
+                    </MudChip>
+                }
+                else if (OrderLineReturnStatuses.TryGetValue(row.Line.Id, out var returnStatus))
+                {
+                    <MudChip T="string" Color="@ReturnStatusColor(returnStatus)" Size="Size.Small">
+                        @ReturnStatusLabel(returnStatus)
+                    </MudChip>
+                }
+                else if (OnRequestReturn.HasDelegate)
+                {
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Filled"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.KeyboardReturn"
+                               Disabled="@ActionBusy"
+                               OnClick="@(() => HandleRequestReturn(row.Line))">
+                        Rückgabe anmelden
+                    </MudButton>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [Parameter] public List<EquipmentOrder> Orders { get; set; } = new();
+    [Parameter] public IReadOnlyDictionary<int, ReturnRequestStatus> OrderLineReturnStatuses { get; set; } = new Dictionary<int, ReturnRequestStatus>();
+    [Parameter] public EventCallback<EquipmentOrderLine> OnRequestReturn { get; set; }
+    [Parameter] public bool ActionBusy { get; set; }
+
+    private List<IssuedOrderLineRow> Rows => Orders
+        .SelectMany(order => order.Lines
+            .Where(IsIssuedOrReturnedStorageLine)
+            .Select(line => new IssuedOrderLineRow(order, line)))
+        .OrderByDescending(row => row.Line.FulfilledAt ?? row.Order.CreatedAt)
+        .ThenByDescending(row => row.Line.Id)
+        .ToList();
+
+    private async Task HandleRequestReturn(EquipmentOrderLine line)
+    {
+        if (OnRequestReturn.HasDelegate)
+            await OnRequestReturn.InvokeAsync(line);
+    }
+
+    private static bool IsIssuedOrReturnedStorageLine(EquipmentOrderLine line)
+    {
+        return line.EffectiveFulfillmentMode == EffectiveFulfillmentMode.UseStorage
+            && line.PositionId.HasValue
+            && line.Status is OrderLineStatus.Fulfilled or OrderLineStatus.Returned;
+    }
+
+    private static string CategoryLabel(EquipmentOrderLine line)
+    {
+        var category = line.Position?.Category?.Name?.Trim();
+        if (!string.IsNullOrWhiteSpace(category))
+            return category;
+
+        return string.IsNullOrWhiteSpace(line.CategoryName)
+            ? "Lagerartikel"
+            : line.CategoryName.Trim();
+    }
+
+    private static string LineStatusLabel(OrderLineStatus status)
+    {
+        return status switch
+        {
+            OrderLineStatus.Fulfilled => "Ausgegeben",
+            OrderLineStatus.Returned => "Zurückgegeben",
+            _ => status.ToString()
+        };
+    }
+
+    private static Color LineStatusColor(OrderLineStatus status)
+    {
+        return status switch
+        {
+            OrderLineStatus.Fulfilled => Color.Success,
+            OrderLineStatus.Returned => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private static string ReturnStatusLabel(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.Pending => "Rückgabe angemeldet",
+            ReturnRequestStatus.ConfirmedReturned => "Zurückgegeben",
+            ReturnRequestStatus.Cancelled => "Abgebrochen",
+            _ => "Rückgabe"
+        };
+    }
+
+    private static Color ReturnStatusColor(ReturnRequestStatus status)
+    {
+        return status switch
+        {
+            ReturnRequestStatus.ConfirmedReturned => Color.Success,
+            ReturnRequestStatus.Cancelled => Color.Error,
+            _ => Color.Warning
+        };
+    }
+
+    private sealed record IssuedOrderLineRow(EquipmentOrder Order, EquipmentOrderLine Line);
+}

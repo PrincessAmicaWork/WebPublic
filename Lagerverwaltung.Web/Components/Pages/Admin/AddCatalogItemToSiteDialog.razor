@@ -1,0 +1,94 @@
+﻿<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.AddLink" Class="mr-2" />
+            Artikel zu @SiteName hinzufügen
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        <MudTextField T="string"
+                      @bind-Value="_search"
+                      Label="Suche"
+                      Placeholder="Name, Code, Kategorie ..."
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Immediate="true"
+                      DebounceInterval="200"
+                      OnDebounceIntervalElapsed="@(_ => ApplyFilter())"
+                      Clearable="true"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="mb-3" />
+
+        @if (!_filtered.Any())
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">Keine passenden Artikel gefunden.</MudAlert>
+        }
+        else
+        {
+            <MudList T="RequestCatalogItem" Dense="true" @bind-SelectedValue="_selected" SelectionMode="SelectionMode.SingleSelection">
+                @foreach (var item in _filtered)
+                {
+                    <MudListItem T="RequestCatalogItem" Value="@item">
+                        <MudText Typo="Typo.body2" Style="font-weight:600;">@item.DisplayName</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@item.CategoryName</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="_selected is null"
+                   OnClick="Submit">
+            Hinzufügen
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public List<RequestCatalogItem> AvailableItems { get; set; } = new();
+    [Parameter] public string SiteName { get; set; } = "";
+
+    private string _search = "";
+    private List<RequestCatalogItem> _filtered = new();
+    private RequestCatalogItem? _selected;
+
+    protected override void OnInitialized()
+    {
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _filtered = AvailableItems;
+            return;
+        }
+
+        var search = _search.Trim();
+        _filtered = AvailableItems
+            .Where(x =>
+                x.ActionCode.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.ItemName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.CategoryName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (_selected is null)
+            return;
+
+        MudDialog.Close(DialogResult.Ok(_selected));
+    }
+}

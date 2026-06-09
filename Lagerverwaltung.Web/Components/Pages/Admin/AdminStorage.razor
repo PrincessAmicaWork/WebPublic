@@ -1,0 +1,943 @@
+@page "/admin/storage"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using System.Net
+@using Lagerverwaltung.Web.Models
+@using Lagerverwaltung.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+
+@inject IStorageService StorageSvc
+@inject ILowStockNotificationService LowStockSvc
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Admin – Lagerverwaltung</PageTitle>
+
+<div class="storage-page">
+    <div class="storage-heading-panel">
+        <div class="storage-heading-copy">
+            <MudText Typo="Typo.h4" Class="storage-title">
+                Lagerverwaltung
+            </MudText>
+
+            <MudText Typo="Typo.body1" Class="storage-subtitle">
+                Lagerbestand, Kategorien, Mindestbestand und Verfügbarkeit an einem Ort verwalten.
+            </MudText>
+        </div>
+
+        @if (!_loading)
+        {
+            <InventoryStatusHero
+                TotalItems="@(_summary?.TotalItems ?? 0)"
+                AvailableItems="@(_summary?.AvailableItems ?? 0)"
+                NewAvailableItems="@(_summary?.NewAvailableItems ?? 0)"
+                UsedAvailableItems="@(_summary?.UsedAvailableItems ?? 0)"
+                CriticalCategories="@(_summary?.LowStockCategoryCount ?? 0)"
+                PendingReturns="@(_summary?.PendingReturnCount ?? 0)" />
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <div class="storage-dashboard-stack">
+            <MudGrid Class="mb-4 storage-summary-grid">
+                <MudItem xs="12" sm="6" md="3">
+                    <div class="storage-summary-card storage-summary-card--total">
+                        <div class="storage-summary-card__topline">
+                            <span>Artikel gesamt</span>
+                            <span class="storage-summary-card__code">GES</span>
+                        </div>
+                        <div class="storage-summary-card__value">@(_summary?.TotalItems ?? 0)</div>
+                        <div class="storage-summary-card__hint">Alle erfassten Lagerartikel</div>
+                    </div>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <div class="storage-summary-card storage-summary-card--available">
+                        <div class="storage-summary-card__topline">
+                            <span>Verfügbar</span>
+                            <span class="storage-summary-card__code">FREI</span>
+                        </div>
+                        <div class="storage-summary-card__value">@(_summary?.AvailableItems ?? 0)</div>
+                        <div class="storage-summary-card__hint">Nicht ausgegeben oder reserviert</div>
+                    </div>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <div class="storage-summary-card storage-summary-card--new">
+                        <div class="storage-summary-card__topline">
+                            <span>Neu verfügbar</span>
+                            <span class="storage-summary-card__code">NEU</span>
+                        </div>
+                        <div class="storage-summary-card__value">@(_summary?.NewAvailableItems ?? 0)</div>
+                        <div class="storage-summary-card__hint">Verfügbare Neuware</div>
+                    </div>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <div class="storage-summary-card storage-summary-card--used">
+                        <div class="storage-summary-card__topline">
+                            <span>Gebraucht verfügbar</span>
+                            <span class="storage-summary-card__code">GEBR</span>
+                        </div>
+                        <div class="storage-summary-card__value">@(_summary?.UsedAvailableItems ?? 0)</div>
+                        <div class="storage-summary-card__hint">Verfügbare Rückläufer</div>
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </div>
+
+        <div class="storage-tabs-shell">
+            <MudTabs Rounded="true" Elevation="0" Class="storage-tabs">
+                <MudTabPanel Text="Übersicht">
+                    <div class="storage-section">
+                        <div class="storage-section-header">
+                            <div>
+                                <div class="storage-section-kicker">Übersicht</div>
+                                <h2>Kategorien und Bestand</h2>
+                                <p>Live-Bestand je Lagerkategorie inklusive Mindestbestand und Nachbestellstatus.</p>
+                            </div>
+                            <span class="storage-section-badge">Live</span>
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-3 align-center mb-4 storage-overview-toolbar">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Disabled="_checkingLowStock"
+                                       OnClick="CheckLowStockAsync">
+                                @if (_checkingLowStock)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                                    <span>Prüfe...</span>
+                                }
+                                else
+                                {
+                                    <span>Mindestbestand prüfen</span>
+                                }
+                            </MudButton>
+
+                            <MudText Typo="Typo.body2">
+                                Kritische Kategorien: <strong>@(_summary?.LowStockCategoryCount ?? 0)</strong>
+                                &nbsp;|&nbsp;
+                                Offene Rückgaben: <strong>@(_summary?.PendingReturnCount ?? 0)</strong>
+                            </MudText>
+                        </div>
+
+                        <MudTable Items="_categorySummaries"
+                                  Hover="true"
+                                  Dense="true"
+                                  RowClassFunc="GetCategoryRowClass">
+                            <HeaderContent>
+                                <MudTh>Kategorie</MudTh>
+                                <MudTh>Gesamt</MudTh>
+                                <MudTh>Verfügbar</MudTh>
+                                <MudTh>Neu</MudTh>
+                                <MudTh>Gebraucht</MudTh>
+                                <MudTh>Mindestbestand</MudTh>
+                                <MudTh>Nachbestell-E-Mail</MudTh>
+                                <MudTh>Status</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Kategorie">@context.CategoryName</MudTd>
+                                <MudTd DataLabel="Gesamt">@context.TotalCount</MudTd>
+                                <MudTd DataLabel="Verfügbar">@context.AvailableCount</MudTd>
+                                <MudTd DataLabel="Neu">@context.NewAvailableCount</MudTd>
+                                <MudTd DataLabel="Gebraucht">@context.UsedAvailableCount</MudTd>
+                                <MudTd DataLabel="Mindestbestand">@context.MinimumAmount</MudTd>
+                                <MudTd DataLabel="Nachbestell-E-Mail">@context.RestockEmail</MudTd>
+                                <MudTd DataLabel="Status">
+                                    @if (context.IsCritical)
+                                    {
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">Kritisch</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">OK</MudChip>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Bestand hinzufügen">
+                    <div class="storage-section">
+                        <div class="storage-section-header">
+                            <div>
+                                <div class="storage-section-kicker">Erfassen</div>
+                                <h2>Bestand hinzufügen</h2>
+                                <p>Neue oder gebrauchte Lagerartikel manuell erfassen und einer Kategorie zuordnen.</p>
+                            </div>
+                            <span class="storage-section-badge storage-section-badge--soft">Manuell</span>
+                        </div>
+
+                        <MudGrid>
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="int" Label="Kategorie" @bind-Value="_addModel.CategoryId" Margin="Margin.Dense">
+                                    <MudSelectItem T="int" Value="0">Bitte auswählen</MudSelectItem>
+                                    @foreach (var category in _categories)
+                                    {
+                                        <MudSelectItem T="int" Value="@category.ID">@category.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudTextField T="string" Label="Beschreibung" @bind-Value="_addModel.Description" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudTextField T="string" Label="Bestellnummer / Interne Nummer" @bind-Value="_addModel.OrderNumber" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudTextField T="string" Label="Lieferant" @bind-Value="_addModel.Supplier" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudNumericField T="double" Label="Preis" Min="0" @bind-Value="_addModel.Price" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudDatePicker Label="Kaufdatum" @bind-Date="_addModel.PurchaseDate" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudNumericField T="int" Label="Menge" Min="1" Max="500" @bind-Value="_addModel.Quantity" Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudSelect T="StockCondition" Label="Zustand" @bind-Value="_addModel.StockCondition" Margin="Margin.Dense">
+                                    <MudSelectItem T="StockCondition" Value="StockCondition.New">Neu</MudSelectItem>
+                                    <MudSelectItem T="StockCondition" Value="StockCondition.Used">Gebraucht</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="4" Class="d-flex align-end">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           Disabled="_saving"
+                                           OnClick="AddItemsAsync">
+                                    Bestand hinzufügen
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Artikel verwalten">
+                    <div class="storage-section">
+                        <div class="storage-section-header">
+                            <div>
+                                <div class="storage-section-kicker">Positionen</div>
+                                <h2>Artikel verwalten</h2>
+                                <p>Einzelne Lagerpositionen suchen, bearbeiten, löschen oder als vernichtet markieren.</p>
+                            </div>
+                            <span class="storage-section-badge storage-section-badge--warning">Admin</span>
+                        </div>
+
+                        <MudGrid Class="mb-3">
+                            <MudItem xs="12" md="3">
+                                <MudSelect T="int" Label="Kategorie" @bind-Value="_itemCategoryFilter" Margin="Margin.Dense">
+                                    <MudSelectItem T="int" Value="0">Alle Kategorien</MudSelectItem>
+                                    @foreach (var category in _categories)
+                                    {
+                                        <MudSelectItem T="int" Value="@category.ID">@category.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+
+                            <MudItem xs="12" md="4">
+                                <MudTextField T="string"
+                                              Label="Suche"
+                                              Placeholder="Beschreibung, Nummer, Lieferant oder Kategorie"
+                                              @bind-Value="_itemSearch"
+                                              Margin="Margin.Dense"
+                                              Immediate="true"
+                                              Adornment="Adornment.End"
+                                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="2" Class="d-flex align-center">
+                                <MudCheckBox T="bool" Label="Nur verfügbar" @bind-Value="_onlyAvailable" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="3" Class="d-flex align-end gap-2">
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadItemsAsync">
+                                    Aktualisieren
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+                            Normales Löschen/Vernichten ist nur für Artikel ohne Verlauf möglich. Für echte Testdaten mit Verlauf kannst du FORCE LÖSCHEN verwenden, aber nur mit exakter Positions-ID.
+                        </MudAlert>
+
+                        <MudGrid Class="mb-3">
+                            <MudItem xs="12" md="6">
+                                <MudTextField T="string"
+                                              Label="Kommentar für Löschen/Vernichten"
+                                              @bind-Value="_removeComment"
+                                              Margin="Margin.Dense" />
+                            </MudItem>
+
+                            <MudItem xs="12" md="6">
+                                <MudTextField T="string"
+                                              Label="Bestätigungs-ID für FORCE LÖSCHEN"
+                                              Placeholder="Exakte Positions-ID eingeben, z.B. 1143"
+                                              @bind-Value="_forceDeleteIdText"
+                                              Margin="Margin.Dense" />
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudTable Items="FilteredItems"
+                                  Hover="true"
+                                  Dense="true"
+                                  RowClassFunc="GetItemRowClass">
+                            <HeaderContent>
+                                <MudTh>ID</MudTh>
+                                <MudTh>Kategorie</MudTh>
+                                <MudTh>Beschreibung</MudTh>
+                                <MudTh>Interne Nr.</MudTh>
+                                <MudTh>Lieferant</MudTh>
+                                <MudTh>Preis</MudTh>
+                                <MudTh>Zustand</MudTh>
+                                <MudTh>Status</MudTh>
+                                <MudTh>Aktionen</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="ID">@context.PositionId</MudTd>
+                                <MudTd DataLabel="Kategorie">@context.CategoryName</MudTd>
+                                <MudTd DataLabel="Beschreibung">@context.Description</MudTd>
+                                <MudTd DataLabel="Interne Nr.">@context.OrderNumber</MudTd>
+                                <MudTd DataLabel="Lieferant">@context.Supplier</MudTd>
+                                <MudTd DataLabel="Preis">@context.Price.ToString("0.00")</MudTd>
+                                <MudTd DataLabel="Zustand">
+                                    @if (context.StockCondition == StockCondition.New)
+                                    {
+                                        <MudChip T="string" Color="Color.Info" Size="Size.Small">Neu</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small">Gebraucht</MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Status">
+                                    @if (context.IsIssued)
+                                    {
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small">Ausgegeben</MudChip>
+                                    }
+                                    else if (context.IsReserved)
+                                    {
+                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small">Reserviert</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">Verfügbar</MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Aktionen">
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   Disabled="_saving"
+                                                   OnClick="@(() => EditItemAsync(context))">
+                                            Bearbeiten
+                                        </MudButton>
+
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Warning"
+                                                   Size="Size.Small"
+                                                   Disabled="_saving || !context.CanRemove"
+                                                   OnClick="@(() => DestroyItemAsync(context))">
+                                            Vernichten
+                                        </MudButton>
+
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   Disabled="_saving || !context.CanRemove"
+                                                   OnClick="@(() => DeleteItemAsync(context))">
+                                            Löschen
+                                        </MudButton>
+
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   Disabled="_saving || !ForceDeleteIdMatches(context.PositionId)"
+                                                   OnClick="@(() => ForceDeleteItemAsync(context))">
+                                            FORCE LÖSCHEN
+                                        </MudButton>
+                                    </div>
+
+                                    @if (!context.CanRemove)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            Normal nicht löschbar: Artikel hat Verlauf, ist reserviert oder ausgegeben.
+                                        </MudText>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Kategorien verwalten">
+                    <div class="storage-section">
+                        <div class="storage-section-header">
+                            <div>
+                                <div class="storage-section-kicker">Struktur</div>
+                                <h2>Kategorien verwalten</h2>
+                                <p>Lagerkategorien, Mindestbestände und Nachbestell-E-Mail-Adressen pflegen.</p>
+                            </div>
+                            <span class="storage-section-badge storage-section-badge--soft">Kategorien</span>
+                        </div>
+
+                        <MudText Typo="Typo.h6" Class="mb-3">Kategorie anlegen</MudText>
+
+                        <MudGrid Class="mb-4">
+                            <MudItem xs="12" md="3">
+                                <MudTextField T="string" Label="Name" @bind-Value="_newCategory.Name" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudTextField T="string" Label="Kommentar" @bind-Value="_newCategory.Comment" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="2">
+                                <MudNumericField T="int" Label="Mindestbestand" Min="0" @bind-Value="_newCategory.MinimumAmount" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudTextField T="string" Label="Nachbestell-E-Mail" @bind-Value="_newCategory.RestockEmail" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="1" Class="d-flex align-center">
+                                <MudCheckBox T="bool" Label="Mail" @bind-Value="_newCategory.NeedsNotification" />
+                            </MudItem>
+                            <MudItem xs="12" Class="d-flex justify-end">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="CreateCategoryAsync">
+                                    Kategorie anlegen
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudText Typo="Typo.h6" Class="mb-3">Kategorien</MudText>
+
+                        <MudTable Items="_categorySummaries"
+                                  Hover="true"
+                                  Dense="true"
+                                  RowClassFunc="GetCategoryRowClass">
+                            <HeaderContent>
+                                <MudTh>ID</MudTh>
+                                <MudTh>Name</MudTh>
+                                <MudTh>Gesamt</MudTh>
+                                <MudTh>Verfügbar</MudTh>
+                                <MudTh>Mindestbestand</MudTh>
+                                <MudTh>Benachrichtigung</MudTh>
+                                <MudTh>Nachbestell-E-Mail</MudTh>
+                                <MudTh>Aktionen</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="ID">@context.CategoryId</MudTd>
+                                <MudTd DataLabel="Name">@context.CategoryName</MudTd>
+                                <MudTd DataLabel="Gesamt">@context.TotalCount</MudTd>
+                                <MudTd DataLabel="Verfügbar">@context.AvailableCount</MudTd>
+                                <MudTd DataLabel="Mindestbestand">@context.MinimumAmount</MudTd>
+                                <MudTd DataLabel="Benachrichtigung">@(context.NeedsNotification ? "Ja" : "Nein")</MudTd>
+                                <MudTd DataLabel="Nachbestell-E-Mail">@context.RestockEmail</MudTd>
+                                <MudTd DataLabel="Aktionen">
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   Disabled="_saving"
+                                                   OnClick="@(() => EditCategoryAsync(context))">
+                                            Bearbeiten
+                                        </MudButton>
+
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   Disabled="_saving || context.TotalCount > 0"
+                                                   OnClick="@(() => DeleteCategoryAsync(context))">
+                                            Löschen
+                                        </MudButton>
+                                    </div>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Rückgaben">
+                    <div class="storage-section">
+                        <div class="storage-section-header">
+                            <div>
+                                <div class="storage-section-kicker">Rücklauf</div>
+                                <h2>Rückgaben</h2>
+                                <p>Übersicht über offene Rückläufer. Die Detailbearbeitung läuft im Admin-Bereich der Bestellungen.</p>
+                            </div>
+                            <span class="storage-section-badge storage-section-badge--soft">Info</span>
+                        </div>
+
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                            Offene Rückgaben laut Dashboard: <strong>@(_summary?.PendingReturnCount ?? 0)</strong>.
+                            Die aktive Bearbeitung von Rückgaben findet im Admin-Bereich der Bestellungen statt.
+                        </MudAlert>
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _saving;
+    private bool _checkingLowStock;
+
+    private StorageDashboardSummary? _summary;
+    private List<Category> _categories = new();
+    private List<StorageCategorySummary> _categorySummaries = new();
+    private List<StorageItemRow> _items = new();
+
+    private AddStorageItemModel _addModel = new();
+    private SaveCategoryModel _newCategory = new();
+
+    private int _itemCategoryFilter;
+    private string _itemSearch = "";
+    private bool _onlyAvailable;
+    private string _removeComment = "";
+    private string _forceDeleteIdText = "";
+
+    private IEnumerable<StorageItemRow> FilteredItems => _items;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Lagerdaten konnten nicht geladen werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ReloadWithoutBigSpinnerAsync()
+    {
+        _categories = await StorageSvc.GetCategoriesAsync();
+        _summary = await StorageSvc.GetDashboardSummaryAsync();
+        _categorySummaries = await StorageSvc.GetCategorySummariesAsync();
+        await LoadItemsAsync();
+    }
+
+    private async Task LoadItemsAsync()
+    {
+        var categoryId = _itemCategoryFilter > 0 ? _itemCategoryFilter : (int?)null;
+        _items = await StorageSvc.GetItemsAsync(categoryId, _itemSearch, _onlyAvailable);
+    }
+
+    private async Task AddItemsAsync()
+    {
+        _saving = true;
+
+        try
+        {
+            var request = new AddStorageItemRequest(
+                CategoryId: _addModel.CategoryId,
+                Description: _addModel.Description,
+                OrderNumber: _addModel.OrderNumber,
+                Supplier: _addModel.Supplier,
+                Price: _addModel.Price,
+                PurchaseDate: _addModel.PurchaseDate ?? DateTime.Today,
+                Quantity: _addModel.Quantity,
+                StockCondition: _addModel.StockCondition);
+
+            var result = await StorageSvc.AddItemsAsync(request);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add("Bestand wurde hinzugefügt.", Severity.Success);
+            _addModel = new AddStorageItemModel();
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Bestand konnte nicht gespeichert werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task EditItemAsync(StorageItemRow item)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Item", item },
+            { "Categories", _categories }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<StorageItemEditDialog>(
+            "Artikel bearbeiten",
+            parameters,
+            options);
+
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is null ||
+            dialogResult.Canceled ||
+            dialogResult.Data is not UpdateStorageItemRequest request)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await StorageSvc.UpdateItemAsync(request);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add("Artikel wurde gespeichert.", Severity.Success);
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Artikel konnte nicht gespeichert werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteItemAsync(StorageItemRow item)
+    {
+        await RemoveItemAsync(item, destroy: false);
+    }
+
+    private async Task DestroyItemAsync(StorageItemRow item)
+    {
+        await RemoveItemAsync(item, destroy: true);
+    }
+
+    private async Task RemoveItemAsync(StorageItemRow item, bool destroy)
+    {
+        _saving = true;
+
+        try
+        {
+            var result = destroy
+                ? await StorageSvc.MarkDestroyedAsync(item.PositionId, _removeComment)
+                : await StorageSvc.DeleteItemAsync(item.PositionId, _removeComment);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add(destroy ? "Artikel wurde als vernichtet entfernt." : "Artikel wurde gelöscht.", Severity.Success);
+            _removeComment = "";
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Aktion konnte nicht ausgeführt werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ForceDeleteItemAsync(StorageItemRow item)
+    {
+        if (!ForceDeleteIdMatches(item.PositionId))
+        {
+            Snackbar.Add("Bitte die exakte Positions-ID in das FORCE-LÖSCHEN-Feld eingeben.", Severity.Warning);
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            title: "Artikel endgültig löschen?",
+            message: $"Position {item.PositionId} ({item.CategoryName} – {item.Description}) wird endgültig gelöscht. Verknüpfte Test-Anfragen, Ausgaben und Rückgaben werden ebenfalls entfernt. Nur für Testdaten verwenden.",
+            yesText: "Endgültig löschen",
+            cancelText: "Abbrechen");
+
+        if (confirmed != true)
+            return;
+
+        _saving = true;
+
+        try
+        {
+            var result = await StorageSvc.ForceDeleteItemAsync(item.PositionId, item.PositionId, _removeComment);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add("Artikel wurde endgültig gelöscht.", Severity.Success);
+            _forceDeleteIdText = "";
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Artikel konnte nicht endgültig gelöscht werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CreateCategoryAsync()
+    {
+        _saving = true;
+
+        try
+        {
+            var request = new SaveCategoryRequest(
+                CategoryId: 0,
+                Name: _newCategory.Name,
+                Comment: _newCategory.Comment,
+                MinimumAmount: _newCategory.MinimumAmount,
+                NeedsNotification: _newCategory.NeedsNotification,
+                RestockEmail: _newCategory.RestockEmail);
+
+            var result = await StorageSvc.CreateCategoryAsync(request);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add("Kategorie wurde angelegt.", Severity.Success);
+            _newCategory = new SaveCategoryModel();
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Kategorie konnte nicht angelegt werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task EditCategoryAsync(StorageCategorySummary category)
+    {
+        var fullCategory = _categories.FirstOrDefault(c => c.ID == category.CategoryId);
+
+        var parameters = new DialogParameters
+        {
+            { "CategoryId", category.CategoryId },
+            { "Name", category.CategoryName },
+            { "Comment", fullCategory?.Comment?.Trim() ?? "" },
+            { "MinimumAmount", category.MinimumAmount },
+            { "NeedsNotification", category.NeedsNotification },
+            { "RestockEmail", category.RestockEmail }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<StorageCategoryEditDialog>(
+            "Kategorie bearbeiten",
+            parameters,
+            options);
+
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is null ||
+            dialogResult.Canceled ||
+            dialogResult.Data is not SaveCategoryRequest request)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await StorageSvc.UpdateCategoryAsync(request);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add("Kategorie wurde gespeichert.", Severity.Success);
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Kategorie konnte nicht gespeichert werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteCategoryAsync(StorageCategorySummary category)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            title: "Kategorie löschen?",
+            message: $"Kategorie '{category.CategoryName}' wirklich löschen? Das geht nur, wenn keine Artikel mehr in dieser Kategorie sind.",
+            yesText: "Löschen",
+            cancelText: "Abbrechen");
+
+        if (confirmed != true)
+            return;
+
+        _saving = true;
+
+        try
+        {
+            var result = await StorageSvc.DeleteCategoryAsync(category.CategoryId);
+
+            if (!result.ok)
+            {
+                Snackbar.Add(result.error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add("Kategorie wurde gelöscht.", Severity.Success);
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Kategorie konnte nicht gelöscht werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CheckLowStockAsync()
+    {
+        _checkingLowStock = true;
+
+        try
+        {
+            var result = await LowStockSvc.CheckAndNotifyAsync("Manuelle Prüfung im Admin-Lager");
+
+            if (result.EmailsSent > 0)
+            {
+                Snackbar.Add($"Mindestbestand geprüft. {result.EmailsSent} E-Mail(s) gesendet.", Severity.Success);
+            }
+            else if (result.CriticalCategories > 0)
+            {
+                Snackbar.Add("Mindestbestand geprüft. Kritische Kategorien gefunden, aber keine neue E-Mail gesendet.", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add("Mindestbestand geprüft. Keine kritischen Kategorien gefunden.", Severity.Success);
+            }
+
+            foreach (var message in result.Messages.Take(3))
+            {
+                Snackbar.Add(message, Severity.Info);
+            }
+
+            await ReloadWithoutBigSpinnerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Mindestbestand konnte nicht geprüft werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _checkingLowStock = false;
+        }
+    }
+
+    private bool ForceDeleteIdMatches(int positionId)
+    {
+        return string.Equals(
+            _forceDeleteIdText?.Trim(),
+            positionId.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetItemRowClass(StorageItemRow item, int rowNumber)
+    {
+        if (item.IsIssued)
+            return "storage-row-issued";
+
+        if (item.IsReserved)
+            return "storage-row-reserved";
+
+        return "";
+    }
+
+    private string GetCategoryRowClass(StorageCategorySummary category, int rowNumber)
+    {
+        return category.IsCritical ? "storage-row-critical" : "";
+    }
+
+    private sealed class AddStorageItemModel
+    {
+        public int CategoryId { get; set; }
+        public string Description { get; set; } = "";
+        public string OrderNumber { get; set; } = "";
+        public string Supplier { get; set; } = "";
+        public double Price { get; set; }
+        public DateTime? PurchaseDate { get; set; } = DateTime.Today;
+        public int Quantity { get; set; } = 1;
+        public StockCondition StockCondition { get; set; } = StockCondition.New;
+    }
+
+    private sealed class SaveCategoryModel
+    {
+        public string Name { get; set; } = "";
+        public string Comment { get; set; } = "";
+        public int MinimumAmount { get; set; }
+        public bool NeedsNotification { get; set; }
+        public string RestockEmail { get; set; } = "";
+    }
+}

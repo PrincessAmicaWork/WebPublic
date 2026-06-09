@@ -1,0 +1,304 @@
+.page-shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 18% 10%, rgba(0, 86, 145, 0.09) 0, rgba(0, 86, 145, 0) 32rem),
+        radial-gradient(circle at 90% 0, rgba(234, 0, 22, 0.07) 0, rgba(234, 0, 22, 0) 24rem),
+        linear-gradient(135deg, #f8fafc 0%, #f3f4f6 48%, #eef2f7 100%);
+}
+
+.sidebar-shell {
+    width: 226px;
+    min-width: 226px;
+    flex: 0 0 226px;
+    height: 100%;
+    background:
+        radial-gradient(circle at 28% -10%, rgba(255, 255, 255, 0.22) 0, rgba(255, 255, 255, 0) 9rem),
+        radial-gradient(circle at 115% 28%, rgba(44, 179, 74, 0.20) 0, rgba(44, 179, 74, 0) 12rem),
+        linear-gradient(180deg, #0067ac 0%, #005691 34%, #00497d 66%, #002f53 100%);
+    box-shadow:
+        12px 0 34px rgba(0, 24, 48, 0.18),
+        inset -1px 0 0 rgba(255, 255, 255, 0.12);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    z-index: 30;
+}
+
+.sidebar-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 34%, rgba(255, 255, 255, 0) 72%),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+    opacity: 0.9;
+}
+
+.sidebar-shell::after {
+    content: "";
+    position: absolute;
+    top: -30%;
+    right: -56%;
+    width: 130px;
+    height: 160%;
+    pointer-events: none;
+    transform: rotate(15deg);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0));
+    opacity: 0.42;
+}
+
+.sidebar-shell > * {
+    position: relative;
+    z-index: 1;
+}
+
+.bosch-brand-panel {
+    height: 116px;
+    min-height: 116px;
+    flex: 0 0 116px;
+    box-sizing: border-box;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0.12)),
+        rgba(0, 0, 0, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 1rem 0.9rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow:
+        inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+        0 10px 24px rgba(0, 0, 0, 0.14);
+}
+
+.bosch-brand-panel::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(234, 0, 22, 0), rgba(234, 0, 22, 0.85), rgba(44, 179, 74, 0.65), rgba(0, 86, 145, 0));
+}
+
+.bosch-logo {
+    width: 174px;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24));
+}
+
+.sidebar-nav-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.main-shell {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.top-header {
+    min-height: 56px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem 0 1.75rem;
+    background-image:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.74)),
+        url("/assets/bosch-supergraphic.svg");
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center right;
+    border-bottom: 3px solid #ea0016;
+    box-shadow:
+        0 12px 28px rgba(15, 23, 42, 0.08),
+        0 1px 0 rgba(255, 255, 255, 0.88) inset;
+    position: relative;
+    z-index: 20;
+    backdrop-filter: blur(10px);
+}
+
+.top-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 3px;
+    background: linear-gradient(90deg, #ea0016 0%, #b90276 25%, #005691 52%, #2cb34a 78%, #f5a623 100%);
+}
+
+.top-header__spacer {
+    flex: 1;
+}
+
+.top-header__user {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: #2f4f2f;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    padding: 0.4rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.site-picker {
+    width: 180px;
+    min-width: 180px;
+    background: rgba(255, 255, 255, 0.86);
+    border-radius: 8px;
+}
+
+.user-name {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-chip {
+    font-weight: 700;
+}
+
+.content-shell {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.content-body {
+    padding: 1.5rem 1.75rem 2rem;
+}
+
+.content-body ::deep .mud-paper {
+    box-shadow:
+        0 18px 42px rgba(15, 23, 42, 0.08),
+        0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.content-body ::deep .mud-button-root {
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+#blazor-error-ui {
+    background: #EA0016;
+    color: white;
+    bottom: 0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+        color: white;
+    }
+
+    #blazor-error-ui .reload {
+        color: white;
+        text-decoration: underline;
+    }
+
+@media (max-width: 640.98px) {
+    .page-shell {
+        height: auto;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: block;
+        overflow: visible;
+    }
+
+    .sidebar-shell {
+        width: 100%;
+        min-width: 100%;
+        flex-basis: auto;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        position: relative;
+        overflow: visible;
+    }
+
+    .sidebar-shell::after {
+        display: none;
+    }
+
+    .bosch-brand-panel {
+        height: auto;
+        min-height: 116px;
+        flex: 0 0 auto;
+        justify-content: flex-start;
+        padding-right: 5rem;
+    }
+
+    .sidebar-nav-host {
+        display: block;
+        min-height: 0;
+        overflow: visible;
+    }
+
+    .main-shell {
+        width: 100%;
+        min-height: 0;
+        height: auto;
+        display: block;
+    }
+
+    .content-shell {
+        overflow: visible;
+    }
+
+    .top-header {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .content-body {
+        padding: 1rem;
+    }
+
+    .user-name {
+        max-width: 140px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .top-header,
+    .sidebar-shell,
+    .content-body ::deep .mud-paper,
+    .content-body ::deep .mud-button-root {
+        transition: none !important;
+    }
+}
